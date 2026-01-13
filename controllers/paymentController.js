@@ -357,12 +357,12 @@ const getAllPayments = async (req, res, next) => {
         }
 
         if (start_date || end_date) {
-            where.createdAt = {};
+            where.created_at = {};
             if (start_date) {
-                where.createdAt[Op.gte] = new Date(start_date);
+                where.created_at[Op.gte] = new Date(start_date);
             }
             if (end_date) {
-                where.createdAt[Op.lte] = new Date(end_date);
+                where.created_at[Op.lte] = new Date(end_date);
             }
         }
 
@@ -379,20 +379,28 @@ const getAllPayments = async (req, res, next) => {
             include: [{
                 model: Order,
                 as: 'order',
-                attributes: ['order_id', 'total_amount', 'order_status', 'payment_status'],
-                include: [{
-                    model: User,
-                    as: 'buyer',
-                    attributes: ['user_id', 'first_name', 'last_name', 'email', 'phone']
-                }]
+                attributes: ['order_id', 'total_amount', 'order_status', 'payment_status', 'buyer_id'],
+                required: false
             }],
-            order: [['createdAt', 'DESC']],
+            order: [['created_at', 'DESC']],
             limit: parseInt(limit),
             offset: parseInt(offset)
         });
 
+        // Fetch buyer info separately if needed
+        const paymentsWithBuyer = await Promise.all(payments.map(async (payment) => {
+            const paymentData = payment.toJSON();
+            if (paymentData.order && paymentData.order.buyer_id) {
+                const buyer = await User.findByPk(paymentData.order.buyer_id, {
+                    attributes: ['user_id', 'first_name', 'last_name', 'email', 'phone']
+                });
+                paymentData.order.buyer = buyer ? buyer.toJSON() : null;
+            }
+            return paymentData;
+        }));
+
         return sendSuccess(res, 200, 'Payments retrieved successfully', {
-            payments,
+            payments: paymentsWithBuyer,
             pagination: {
                 total: count,
                 page: parseInt(page),
@@ -418,11 +426,7 @@ const getPaymentById = async (req, res, next) => {
             include: [{
                 model: Order,
                 as: 'order',
-                include: [{
-                    model: User,
-                    as: 'buyer',
-                    attributes: ['user_id', 'first_name', 'last_name', 'email', 'phone']
-                }]
+                required: false
             }]
         });
 
@@ -430,7 +434,17 @@ const getPaymentById = async (req, res, next) => {
             return sendError(res, 404, 'Payment not found');
         }
 
-        return sendSuccess(res, 200, 'Payment retrieved successfully', { payment });
+        const paymentData = payment.toJSON();
+
+        // Fetch buyer separately
+        if (paymentData.order && paymentData.order.buyer_id) {
+            const buyer = await User.findByPk(paymentData.order.buyer_id, {
+                attributes: ['user_id', 'first_name', 'last_name', 'email', 'phone']
+            });
+            paymentData.order.buyer = buyer ? buyer.toJSON() : null;
+        }
+
+        return sendSuccess(res, 200, 'Payment retrieved successfully', { payment: paymentData });
     } catch (error) {
         console.error('Get payment by ID error:', error);
         next(error);
@@ -454,7 +468,8 @@ const getPaymentStats = async (req, res, next) => {
                 [sequelize.fn('COUNT', sequelize.col('payment_id')), 'count'],
                 [sequelize.fn('SUM', sequelize.col('amount')), 'total_amount']
             ],
-            group: ['status']
+            group: ['status'],
+            raw: true
         });
 
         // Stats by payment method
@@ -465,24 +480,17 @@ const getPaymentStats = async (req, res, next) => {
                 [sequelize.fn('SUM', sequelize.col('amount')), 'total_amount']
             ],
             where: {
-                createdAt: { [Op.gte]: startDate }
+                created_at: { [Op.gte]: startDate }
             },
-            group: ['payment_method']
+            group: ['payment_method'],
+            raw: true
         });
 
-        // Recent period stats
-        const recentStats = await Payment.findAll({
-            attributes: [
-                [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-                'status',
-                [sequelize.fn('COUNT', sequelize.col('payment_id')), 'count'],
-                [sequelize.fn('SUM', sequelize.col('amount')), 'total_amount']
-            ],
+        // Recent period stats - simplified without date grouping
+        const recentCount = await Payment.count({
             where: {
-                createdAt: { [Op.gte]: startDate }
-            },
-            group: [sequelize.fn('DATE', sequelize.col('createdAt')), 'status'],
-            order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']]
+                created_at: { [Op.gte]: startDate }
+            }
         });
 
         // Calculate totals
@@ -496,27 +504,27 @@ const getPaymentStats = async (req, res, next) => {
 
         return sendSuccess(res, 200, 'Payment statistics retrieved', {
             summary: {
-                total_revenue: parseFloat(successfulPayments?.dataValues?.total_amount || 0),
-                total_successful: parseInt(successfulPayments?.dataValues?.count || 0),
-                total_pending: parseInt(pendingPayments?.dataValues?.count || 0),
-                total_failed: parseInt(failedPayments?.dataValues?.count || 0),
-                pending_amount: parseFloat(pendingPayments?.dataValues?.total_amount || 0)
+                total_revenue: parseFloat(successfulPayments?.total_amount || 0),
+                total_successful: parseInt(successfulPayments?.count || 0),
+                total_pending: parseInt(pendingPayments?.count || 0),
+                total_failed: parseInt(failedPayments?.count || 0),
+                pending_amount: parseFloat(pendingPayments?.total_amount || 0)
             },
             by_method: {
                 chapa: {
-                    count: parseInt(chapaStats?.dataValues?.count || 0),
-                    amount: parseFloat(chapaStats?.dataValues?.total_amount || 0)
+                    count: parseInt(chapaStats?.count || 0),
+                    amount: parseFloat(chapaStats?.total_amount || 0)
                 },
                 telebirr: {
-                    count: parseInt(telebirrStats?.dataValues?.count || 0),
-                    amount: parseFloat(telebirrStats?.dataValues?.total_amount || 0)
+                    count: parseInt(telebirrStats?.count || 0),
+                    amount: parseFloat(telebirrStats?.total_amount || 0)
                 },
                 screenshot: {
-                    count: parseInt(screenshotStats?.dataValues?.count || 0),
-                    amount: parseFloat(screenshotStats?.dataValues?.total_amount || 0)
+                    count: parseInt(screenshotStats?.count || 0),
+                    amount: parseFloat(screenshotStats?.total_amount || 0)
                 }
             },
-            daily_stats: recentStats,
+            recent_count: recentCount,
             period_days: parseInt(period)
         });
     } catch (error) {
