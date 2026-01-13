@@ -20,7 +20,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:5173','http://localhost:8081'],
+    origin: ['http://localhost:5173', 'http://localhost:8081', 'http://admin.shegergebeya.com', 'https://admin.shegergebeya.com'],
     credentials: true
 }));
 
@@ -70,7 +70,7 @@ const startServer = async () => {
         try {
             await db.sequelize.sync({ alter: false });
             console.log('✓ Database models synchronized (no alter - tables preserved)');
-            
+
             // Setup Telegram bot handlers after DB sync
             setupBotHandlers();
         } catch (syncError) {
