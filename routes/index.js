@@ -16,6 +16,7 @@ const advertisementRoutes = require('./advertisementRoutes');
 const butcherRoutes = require('./butcherRoutes');
 const stockRoutes = require('./stockRoutes');
 const sellerPlanRoutes = require('./sellerPlanRoutes');
+const paymentRoutes = require('./paymentRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -32,6 +33,8 @@ router.use('/advertisements', advertisementRoutes);
 router.use('/butchers', butcherRoutes);
 router.use('/', stockRoutes); // Stock routes (has its own seller/admin prefixes)
 router.use('/seller-plans', sellerPlanRoutes);
+router.use('/payments', paymentRoutes);
+
 
 // Health check endpoint
 router.get('/health', (req, res) => {

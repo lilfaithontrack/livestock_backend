@@ -32,6 +32,9 @@ router.get('/products', adminController.getAllProducts);
 // Create product (admin can create products)
 router.post('/products', upload.array('images', 10), validateProductCreation, productController.createProduct);
 
+// Create product with Qercha package (combined creation)
+router.post('/products/with-qercha', upload.array('images', 10), validateProductCreation, productController.createProductWithQercha);
+
 // Update product (admin)
 router.put('/products/:id', upload.array('images', 10), productController.updateProduct);
 

@@ -1,4 +1,5 @@
-const { Product, User, ProductSubcategory, ProductCategory } = require('../models');
+const { Product, User, ProductSubcategory, ProductCategory, QerchaPackage } = require('../models');
+const sequelize = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { compressMultipleImages } = require('../middleware/uploadMiddleware');
 const {
@@ -406,8 +407,8 @@ const updateProduct = async (req, res, next) => {
         let existing_images = [];
         if (req.body.existing_images) {
             try {
-                existing_images = typeof req.body.existing_images === 'string' 
-                    ? JSON.parse(req.body.existing_images) 
+                existing_images = typeof req.body.existing_images === 'string'
+                    ? JSON.parse(req.body.existing_images)
                     : req.body.existing_images;
             } catch (e) {
                 console.error('Error parsing existing_images:', e);
@@ -417,8 +418,8 @@ const updateProduct = async (req, res, next) => {
         let removed_images = [];
         if (req.body.removed_images) {
             try {
-                removed_images = typeof req.body.removed_images === 'string' 
-                    ? JSON.parse(req.body.removed_images) 
+                removed_images = typeof req.body.removed_images === 'string'
+                    ? JSON.parse(req.body.removed_images)
                     : req.body.removed_images;
             } catch (e) {
                 console.error('Error parsing removed_images:', e);
@@ -533,8 +534,8 @@ const updateProduct = async (req, res, next) => {
 
         await product.update(updates);
 
-        const message = user_role === 'Admin' 
-            ? 'Product updated successfully' 
+        const message = user_role === 'Admin'
+            ? 'Product updated successfully'
             : 'Product updated successfully, pending approval';
 
         return sendSuccess(res, 200, message, {
@@ -644,11 +645,192 @@ const getSellerProducts = async (req, res, next) => {
     }
 };
 
+/**
+ * Create product with Qercha package (Admin only)
+ * POST /api/v1/admin/products/with-qercha
+ * Creates both product and qercha package in a single atomic transaction
+ */
+const createProductWithQercha = async (req, res, next) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        const {
+            // Basic Information
+            name, description, product_type, sub_cat_id,
+            // Pricing & Inventory
+            price, deleted_price, discount_percentage, currency,
+            stock_quantity, minimum_order_quantity,
+            // Livestock Specific
+            breed, age_months, date_of_birth, gender, weight_kg,
+            height_cm, color_markings, mother_id, father_id,
+            // Health & Medical
+            health_status, vaccination_records, medical_history,
+            veterinary_certificates, last_health_checkup,
+            // Genetics & Performance
+            genetic_traits, milk_production_liters_per_day,
+            breeding_history, offspring_count,
+            // Location & Logistics
+            location, latitude, longitude, shipping_available,
+            delivery_timeframe_days, pickup_available,
+            // Certifications & Compliance
+            certificate_urls, license_numbers, organic_certified,
+            // Marketplace Features
+            featured, tags,
+            // Media
+            video_urls,
+            // Metadata
+            metadata,
+            // Admin-only: seller_id
+            seller_id: provided_seller_id,
+            // Qercha fields
+            create_qercha,
+            total_shares,
+            start_date,
+            expiry_date
+        } = req.body;
+
+        const user_id = req.user.user_id;
+
+        // Determine seller_id: Admin can specify, or use their own
+        let seller_id = provided_seller_id || user_id;
+        const specifiedSeller = await User.findByPk(seller_id, { transaction });
+        if (!specifiedSeller) {
+            await transaction.rollback();
+            return sendError(res, 400, 'Specified seller does not exist');
+        }
+
+        // Handle uploaded images with compression
+        let image_urls = [];
+        if (req.files && req.files.length > 0) {
+            image_urls = await compressMultipleImages(req.files, {
+                width: 1200,
+                height: 1200,
+                quality: 85
+            });
+        }
+
+        // Generate unique SKU
+        const sku = generateProductSKU('LVS');
+
+        // Calculate age from date_of_birth if not provided
+        const calculatedAge = age_months || (date_of_birth ? calculateProductAge(date_of_birth) : null);
+
+        // Create product with Live status (admin-created = auto-approved)
+        const product = await Product.create({
+            seller_id,
+            sub_cat_id,
+            sku,
+            name,
+            description,
+            product_type: product_type || 'livestock',
+            price,
+            deleted_price,
+            discount_percentage: discount_percentage || 0,
+            currency: currency || 'ETB',
+            stock_quantity: stock_quantity || 1,
+            minimum_order_quantity: minimum_order_quantity || 1,
+            breed,
+            age_months: calculatedAge,
+            date_of_birth,
+            gender,
+            weight_kg,
+            height_cm,
+            color_markings,
+            mother_id,
+            father_id,
+            health_status: health_status || 'unknown',
+            vaccination_records: vaccination_records ? JSON.parse(vaccination_records) : [],
+            medical_history,
+            veterinary_certificates: veterinary_certificates ? JSON.parse(veterinary_certificates) : [],
+            last_health_checkup,
+            genetic_traits,
+            milk_production_liters_per_day,
+            breeding_history,
+            offspring_count: offspring_count || 0,
+            location,
+            latitude,
+            longitude,
+            shipping_available: shipping_available || false,
+            delivery_timeframe_days,
+            pickup_available: pickup_available !== undefined ? pickup_available : true,
+            certificate_urls: certificate_urls ? JSON.parse(certificate_urls) : [],
+            license_numbers: license_numbers ? JSON.parse(license_numbers) : [],
+            organic_certified: organic_certified || false,
+            image_urls,
+            video_urls: video_urls ? JSON.parse(video_urls) : [],
+            featured: featured || false,
+            tags: tags ? JSON.parse(tags) : [],
+            metadata: metadata ? JSON.parse(metadata) : {},
+            // Auto-approve for admin with qercha (must be Live for qercha)
+            status: 'Live',
+            availability_status: 'available'
+        }, { transaction });
+
+        let qerchaPackage = null;
+
+        // Create Qercha package if requested
+        const shouldCreateQercha = create_qercha === 'true' || create_qercha === true;
+        if (shouldCreateQercha) {
+            const sharesCount = parseInt(total_shares) || 4;
+
+            if (sharesCount < 2) {
+                await transaction.rollback();
+                return sendError(res, 400, 'Qercha package requires at least 2 shares');
+            }
+
+            qerchaPackage = await QerchaPackage.create({
+                ox_product_id: product.product_id,
+                total_shares: sharesCount,
+                shares_available: sharesCount,
+                host_user_id: user_id,
+                status: 'Active',
+                start_date: start_date || null,
+                expiry_date: expiry_date || null
+            }, { transaction });
+        }
+
+        await transaction.commit();
+
+        const response = {
+            product_id: product.product_id,
+            sku: product.sku,
+            status: product.status
+        };
+
+        if (qerchaPackage) {
+            response.qercha_package = {
+                package_id: qerchaPackage.package_id,
+                total_shares: qerchaPackage.total_shares
+            };
+        }
+
+        return sendSuccess(res, 201,
+            qerchaPackage
+                ? 'Product and Qercha package created successfully'
+                : 'Product created successfully',
+            response
+        );
+    } catch (error) {
+        await transaction.rollback();
+        // Clean up uploaded files if creation fails
+        if (req.files) {
+            req.files.forEach(file => {
+                const filePath = path.join(process.env.UPLOAD_DIR || './uploads', 'compressed', file.filename);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
+            });
+        }
+        next(error);
+    }
+};
+
 module.exports = {
     createProduct,
     getProducts,
     getProductById,
     updateProduct,
     deleteProduct,
-    getSellerProducts
+    getSellerProducts,
+    createProductWithQercha
 };
