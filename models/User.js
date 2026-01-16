@@ -77,6 +77,11 @@ const User = sequelize.define('users', {
         type: DataTypes.DATE,
         allowNull: true,
         comment: 'When seller selected their plan'
+    },
+    telegram_id: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+        comment: 'Telegram user ID for receiving OTPs'
     }
 }, {
     hooks: {

@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User, TelegramMapping } = require('../models');
+const { User } = require('../models');
 const jwtConfig = require('../config/jwt');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { generateOTP, hashOTP, verifyOTP, getOTPExpiration } = require('../utils/otpGenerator');
@@ -86,17 +86,12 @@ const loginWithPhone = async (req, res, next) => {
         try {
             const { sendOTP } = require('../services/telegramBot');
 
-            // Check if user has Telegram linked
-            const mapping = await TelegramMapping.findOne({
-                where: { phone: normalizedPhone }
-            });
-
-            if (mapping && mapping.telegram_user_id) {
+            // Check if user exists and has Telegram linked
+            if (user && user.telegram_id) {
                 telegramLinked = true;
-                otpSent = await sendOTP(mapping.telegram_user_id, otp, normalizedPhone);
+                otpSent = await sendOTP(user.telegram_id, otp, normalizedPhone);
                 if (otpSent) {
-                    await mapping.update({ last_otp_sent_at: new Date() });
-                    console.log(`✓ OTP sent to Telegram user ${mapping.telegram_user_id} for ${normalizedPhone}`);
+                    console.log(`✓ OTP sent to Telegram user ${user.telegram_id} for ${normalizedPhone}`);
                 }
             }
         } catch (error) {
