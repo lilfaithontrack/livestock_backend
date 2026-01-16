@@ -1,13 +1,13 @@
 <?php
 /**
  * Telegram OTP Sender
- * This PHP script sends OTPs via Telegram Bot API
+ * Sends OTPs via Telegram Bot API - supports both direct messages and channel
  * Deploy at: sms.shegergebeya.com
  */
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 // Handle preflight
@@ -16,19 +16,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// Configuration - Change this to your actual bot token
-define('TELEGRAM_BOT_TOKEN', getenv('TELEGRAM_BOT_TOKEN') ?: 'YOUR_BOT_TOKEN_HERE');
-define('API_SECRET', getenv('SMS_API_SECRET') ?: 'your-secret-key-here');
+// ============================================
+// CONFIGURATION - CHANGE THESE VALUES
+// ============================================
+define('TELEGRAM_BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE'); // Get from @BotFather
+define('TELEGRAM_CHANNEL_ID', '@your_channel'); // Fallback channel (optional)
+define('API_SECRET', 'your-secret-key-here'); // Secret key for API auth
+// ============================================
 
 /**
- * Send response
+ * Send JSON response
  */
 function sendResponse($success, $message, $data = null) {
     echo json_encode([
         'success' => $success,
         'message' => $message,
         'data' => $data
-    ]);
+    ], JSON_PRETTY_PRINT);
     exit();
 }
 
@@ -36,17 +40,18 @@ function sendResponse($success, $message, $data = null) {
  * Verify API secret
  */
 function verifySecret() {
+    if (isset($_GET['secret']) && $_GET['secret'] === API_SECRET) {
+        return true;
+    }
+    
     $headers = getallheaders();
     $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';
-    
     if (empty($authHeader)) {
         $authHeader = isset($headers['authorization']) ? $headers['authorization'] : '';
     }
     
-    // Extract Bearer token
     if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
-        $token = $matches[1];
-        if ($token === API_SECRET) {
+        if ($matches[1] === API_SECRET) {
             return true;
         }
     }
@@ -55,19 +60,13 @@ function verifySecret() {
 }
 
 /**
- * Send OTP via Telegram
+ * Send message via Telegram Bot API
  */
-function sendTelegramOTP($telegramUserId, $otp, $phone) {
-    $message = "🔐 *OTP Verification*\n\n" .
-               "Your verification code is: *{$otp}*\n\n" .
-               "Phone: {$phone}\n" .
-               "This code will expire in 10 minutes.\n\n" .
-               "⚠️ Do not share this code with anyone.";
-
+function sendTelegramMessage($chatId, $message) {
     $url = "https://api.telegram.org/bot" . TELEGRAM_BOT_TOKEN . "/sendMessage";
     
-    $data = [
-        'chat_id' => $telegramUserId,
+    $postData = [
+        'chat_id' => $chatId,
         'text' => $message,
         'parse_mode' => 'Markdown'
     ];
@@ -75,18 +74,18 @@ function sendTelegramOTP($telegramUserId, $otp, $phone) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
+    $curlError = curl_error($ch);
     curl_close($ch);
 
-    if ($error) {
-        return ['success' => false, 'error' => $error];
+    if ($curlError) {
+        return ['success' => false, 'error' => 'cURL: ' . $curlError];
     }
 
     $result = json_decode($response, true);
@@ -103,103 +102,106 @@ function sendTelegramOTP($telegramUserId, $otp, $phone) {
 }
 
 /**
- * Send OTP to channel (fallback method)
+ * Send OTP to a user directly (using their telegram_user_id)
  */
-function sendChannelOTP($phone, $otp, $channelId) {
-    $last4Digits = substr($phone, -4);
-    $message = "🔐 *OTP for phone ending in *{$last4Digits}*\n\n" .
-               "Code: *{$otp}*\n\n" .
-               "⚠️ This code expires in 10 minutes.";
-
-    $url = "https://api.telegram.org/bot" . TELEGRAM_BOT_TOKEN . "/sendMessage";
+function sendOTPToUser($telegramUserId, $otp, $phone) {
+    $message = "🔐 *OTP Verification*\n\n" .
+               "Your code: *{$otp}*\n\n" .
+               "📱 Phone: {$phone}\n" .
+               "⏱ Expires in 10 minutes\n\n" .
+               "⚠️ Don't share this code!";
     
-    $data = [
-        'chat_id' => $channelId,
-        'text' => $message,
-        'parse_mode' => 'Markdown'
-    ];
-
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    $result = json_decode($response, true);
-    
-    return $httpCode === 200 && isset($result['ok']) && $result['ok'];
+    return sendTelegramMessage($telegramUserId, $message);
 }
 
-// Main handler
+/**
+ * Send OTP to channel (fallback - shows masked phone)
+ */
+function sendOTPToChannel($phone, $otp) {
+    $maskedPhone = '***' . substr($phone, -4);
+    
+    $message = "🔐 *OTP Code*\n\n" .
+               "📱 Phone: `{$maskedPhone}`\n" .
+               "🔑 Code: *{$otp}*\n\n" .
+               "⏱ Expires: 10 min";
+    
+    return sendTelegramMessage(TELEGRAM_CHANNEL_ID, $message);
+}
+
+// ============================================
+// MAIN HANDLER
+// ============================================
+
+// Health check (GET)
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    sendResponse(true, 'Telegram OTP Service OK', [
+        'version' => '2.0',
+        'bot_configured' => TELEGRAM_BOT_TOKEN !== 'YOUR_BOT_TOKEN_HERE',
+        'channel_configured' => TELEGRAM_CHANNEL_ID !== '@your_channel'
+    ]);
+}
+
+// Send OTP (POST)
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    sendResponse(false, 'Method not allowed. Use POST.');
+    sendResponse(false, 'Use POST to send OTP');
 }
 
-// Verify API secret
+// Auth check
 if (!verifySecret()) {
     http_response_code(401);
-    sendResponse(false, 'Unauthorized. Invalid API secret.');
+    sendResponse(false, 'Unauthorized');
 }
 
-// Get request body
+// Parse request
 $input = file_get_contents('php://input');
 $data = json_decode($input, true);
 
 if (!$data) {
-    sendResponse(false, 'Invalid JSON body');
+    sendResponse(false, 'Invalid JSON');
 }
 
-// Validate required fields
 if (empty($data['otp'])) {
-    sendResponse(false, 'OTP is required');
+    sendResponse(false, 'OTP required');
 }
 
-if (empty($data['telegram_user_id']) && empty($data['channel_id'])) {
-    sendResponse(false, 'Either telegram_user_id or channel_id is required');
+if (empty($data['phone'])) {
+    sendResponse(false, 'Phone required');
 }
 
 $otp = $data['otp'];
-$phone = isset($data['phone']) ? $data['phone'] : 'Unknown';
+$phone = $data['phone'];
 $telegramUserId = isset($data['telegram_user_id']) ? $data['telegram_user_id'] : null;
-$channelId = isset($data['channel_id']) ? $data['channel_id'] : null;
 
-// Try sending to user first, then fallback to channel
+// Try to send to user directly if we have their ID
 if ($telegramUserId) {
-    $result = sendTelegramOTP($telegramUserId, $otp, $phone);
+    $result = sendOTPToUser($telegramUserId, $otp, $phone);
     
     if ($result['success']) {
-        sendResponse(true, 'OTP sent successfully via Telegram', [
-            'method' => 'direct_message',
+        sendResponse(true, 'OTP sent to user', [
+            'method' => 'direct',
             'message_id' => $result['message_id']
         ]);
-    } else {
-        // If direct message fails and we have a channel, try channel
-        if ($channelId) {
-            $channelResult = sendChannelOTP($phone, $otp, $channelId);
-            if ($channelResult) {
-                sendResponse(true, 'OTP sent via channel (direct message failed)', [
-                    'method' => 'channel',
-                    'direct_error' => $result['error']
-                ]);
-            }
-        }
-        
-        sendResponse(false, 'Failed to send OTP: ' . $result['error'], [
-            'error_code' => isset($result['error_code']) ? $result['error_code'] : null
-        ]);
     }
-} else if ($channelId) {
-    $result = sendChannelOTP($phone, $otp, $channelId);
-    if ($result) {
-        sendResponse(true, 'OTP sent via channel', ['method' => 'channel']);
-    } else {
-        sendResponse(false, 'Failed to send OTP to channel');
-    }
+    
+    // If direct failed, log but continue to try channel
+    error_log("Direct send failed for user {$telegramUserId}: " . $result['error']);
 }
 
-sendResponse(false, 'No valid recipient specified');
+// Fallback to channel if configured
+if (TELEGRAM_CHANNEL_ID !== '@your_channel') {
+    $result = sendOTPToChannel($phone, $otp);
+    
+    if ($result['success']) {
+        sendResponse(true, 'OTP sent to channel', [
+            'method' => 'channel',
+            'message_id' => $result['message_id']
+        ]);
+    }
+    
+    sendResponse(false, 'Channel send failed: ' . $result['error'], [
+        'error_code' => $result['error_code'] ?? null
+    ]);
+}
+
+// No valid method available
+sendResponse(false, 'No telegram_user_id provided and no channel configured');
