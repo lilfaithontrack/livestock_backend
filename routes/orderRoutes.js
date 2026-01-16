@@ -5,8 +5,8 @@ const verifyToken = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/roleMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
-// Create order / checkout (Buyer)
-router.post('/checkout', verifyToken, requireRole(['Buyer']), orderController.createOrder);
+// Create order / checkout (Buyer and Seller - sellers can also buy)
+router.post('/checkout', verifyToken, requireRole(['Buyer', 'Seller']), orderController.createOrder);
 
 // Get user's orders (buyer orders)
 router.get('/', verifyToken, orderController.getOrders);
@@ -20,7 +20,8 @@ router.get('/:id', verifyToken, orderController.getOrderById);
 // Update order status (Admin)
 router.put('/:id/status', verifyToken, requireRole(['Admin']), orderController.updateOrderStatus);
 
-// Upload payment proof (Buyer)
-router.post('/:id/payment-proof', verifyToken, requireRole(['Buyer']), upload.single('payment_proof'), orderController.uploadPaymentProof);
+// Upload payment proof (Buyer and Seller - sellers can also buy)
+router.post('/:id/payment-proof', verifyToken, requireRole(['Buyer', 'Seller']), upload.single('payment_proof'), orderController.uploadPaymentProof);
 
 module.exports = router;
+
