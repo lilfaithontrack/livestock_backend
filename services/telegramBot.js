@@ -1,97 +1,52 @@
-const TelegramBot = require('node-telegram-bot-api');
-const { sendSuccess, sendError } = require('../utils/responseHandler');
+/**
+ * Telegram OTP Service
+ * Uses external PHP service at sms.shegergebeya.com to send OTPs via Telegram
+ */
 
-// Initialize bot
-const token = process.env.TELEGRAM_BOT_TOKEN;
-if (!token) {
-    console.warn('⚠️  TELEGRAM_BOT_TOKEN not set. Telegram bot features will be disabled.');
-}
+const axios = require('axios');
 
-let bot = null;
-if (token) {
-    // Use polling for development, webhook for production
-    const useWebhook = process.env.TELEGRAM_USE_WEBHOOK === 'true';
-    
-    try {
-        if (useWebhook) {
-            bot = new TelegramBot(token);
-            bot.setWebHook(`${process.env.TELEGRAM_WEBHOOK_URL}/bot${token}`);
-            console.log('✓ Telegram bot initialized with webhook');
-        } else {
-            // Use polling with error handling
-            bot = new TelegramBot(token, { 
-                polling: {
-                    interval: 1000,
-                    autoStart: true,
-                    params: {
-                        timeout: 10
-                    }
-                }
-            });
-            
-            // Handle polling errors gracefully
-            bot.on('polling_error', (error) => {
-                console.error('⚠️ Telegram polling error:', error.message);
-                // Don't crash on polling errors - bot can still send messages
-                if (error.code === 'EFATAL' || error.code === 'ETIMEDOUT') {
-                    console.warn('⚠️ Telegram API connection issue. Bot will continue but may have limited functionality.');
-                }
-            });
-            
-            console.log('✓ Telegram bot initialized with polling');
-        }
-    } catch (error) {
-        console.error('✗ Failed to initialize Telegram bot:', error.message);
-        console.warn('⚠️  Bot features will be disabled. OTP will be returned in response.');
-        bot = null;
-    }
-} else {
-    console.warn('⚠️  TELEGRAM_BOT_TOKEN not set. Telegram bot features will be disabled.');
-}
+// Configuration
+const SMS_SERVICE_URL = process.env.SMS_SERVICE_URL || 'https://sms.shegergebeya.com/send-otp.php';
+const SMS_API_SECRET = process.env.SMS_API_SECRET || 'your-secret-key-here';
+const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'ethiolivestock_bot';
 
 /**
- * Send OTP to user via Telegram by user ID
+ * Send OTP via external PHP service
  * @param {string} telegramUserId - Telegram user ID (chat_id)
  * @param {string} otp - OTP code to send
  * @param {string} phone - Phone number (for context)
  * @returns {Promise<boolean>} Success status
  */
 const sendOTP = async (telegramUserId, otp, phone) => {
-    if (!bot) {
-        console.error('Telegram bot not initialized');
-        return false;
-    }
-
     try {
-        const message = `🔐 *OTP Verification*\n\n` +
-            `Your verification code is: *${otp}*\n\n` +
-            `Phone: ${phone}\n` +
-            `This code will expire in 10 minutes.\n\n` +
-            `⚠️ Do not share this code with anyone.`;
+        console.log(`Sending OTP to Telegram user ${telegramUserId} via PHP service...`);
 
-        // Add timeout to prevent hanging
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Telegram API timeout')), 10000); // 10 second timeout
+        const response = await axios.post(SMS_SERVICE_URL, {
+            telegram_user_id: telegramUserId,
+            otp: otp,
+            phone: phone
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SMS_API_SECRET}`
+            },
+            timeout: 15000 // 15 second timeout
         });
 
-        await Promise.race([
-            bot.sendMessage(telegramUserId, message, {
-                parse_mode: 'Markdown'
-            }),
-            timeoutPromise
-        ]);
-        
-        console.log(`✓ OTP sent to Telegram user ${telegramUserId} for phone ${phone}`);
-        return true;
-    } catch (error) {
-        // Handle timeout and connection errors gracefully
-        if (error.code === 'ETIMEDOUT' || error.message === 'Telegram API timeout' || error.cause?.code === 'ETIMEDOUT') {
-            console.warn(`⚠️ Telegram API connection timeout for user ${telegramUserId}. OTP: ${otp}`);
-            console.warn('This may be due to network issues or Telegram API being blocked.');
-        } else if (error.response?.body?.error_code === 403) {
-            console.error(`User ${telegramUserId} has blocked the bot or chat not found`);
+        if (response.data && response.data.success) {
+            console.log(`✓ OTP sent successfully to Telegram user ${telegramUserId}`);
+            return true;
         } else {
-            console.error('Error sending OTP via Telegram:', error.message || error);
+            console.error('PHP SMS service returned error:', response.data?.message || 'Unknown error');
+            return false;
+        }
+    } catch (error) {
+        if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+            console.error(`⚠️ SMS service timeout for user ${telegramUserId}`);
+        } else if (error.response) {
+            console.error('SMS service error:', error.response.data?.message || error.response.statusText);
+        } else {
+            console.error('Error sending OTP via SMS service:', error.message);
         }
         return false;
     }
@@ -99,17 +54,11 @@ const sendOTP = async (telegramUserId, otp, phone) => {
 
 /**
  * Try to send OTP to user by phone number (automatic discovery)
- * This attempts to find the user by phone number and send OTP
  * @param {string} phone - Phone number
  * @param {string} otp - OTP code to send
  * @returns {Promise<{success: boolean, method: string, userId?: number}>}
  */
 const sendOTPByPhone = async (phone, otp) => {
-    if (!bot) {
-        return { success: false, method: 'bot_not_initialized' };
-    }
-
-    // Method 1: Try to find user by phone number in existing mappings
     try {
         const { TelegramMapping } = require('../models');
         const mapping = await TelegramMapping.findOne({
@@ -124,11 +73,10 @@ const sendOTPByPhone = async (phone, otp) => {
             }
         }
     } catch (error) {
-        console.error('Error checking existing mapping:', error);
+        console.error('Error checking existing mapping:', error.message);
     }
 
-    // Method 2: Post to public Telegram channel (works for all users automatically)
-    // This is the automatic method - users join the channel to receive OTPs
+    // Try sending to channel if configured
     const channelId = process.env.TELEGRAM_OTP_CHANNEL_ID;
     if (channelId) {
         try {
@@ -137,114 +85,76 @@ const sendOTPByPhone = async (phone, otp) => {
                 return { success: true, method: 'public_channel', note: 'OTP posted to public channel' };
             }
         } catch (error) {
-            console.error('Error sending OTP to channel:', error);
+            console.error('Error sending OTP to channel:', error.message);
         }
     }
-    
-    // Method 3: Try to find user if they've interacted with bot before
-    // Note: Telegram Bot API doesn't support messaging by phone number directly
-    // This would only work if user has shared their contact with the bot
-    
-    return { success: false, method: 'phone_not_found', note: 'Use public channel or link phone first' };
+
+    return { success: false, method: 'phone_not_found', note: 'User not linked to Telegram' };
 };
 
 /**
  * Send OTP via public channel/group (alternative method)
- * This posts OTP to a public channel where users can see it
- * Less secure but works without linking
  * @param {string} phone - Phone number (last 4 digits for privacy)
  * @param {string} otp - OTP code
  * @param {string} channelId - Telegram channel/group ID
  * @returns {Promise<boolean>}
  */
 const sendOTPViaChannel = async (phone, otp, channelId) => {
-    if (!bot) return false;
-
     try {
-        const last4Digits = phone.slice(-4);
-        const message = `🔐 *OTP for phone ending in *${last4Digits}*\n\n` +
-            `Code: *${otp}*\n\n` +
-            `⚠️ This code expires in 10 minutes.`;
-
-        await bot.sendMessage(channelId, message, {
-            parse_mode: 'Markdown'
+        const response = await axios.post(SMS_SERVICE_URL, {
+            channel_id: channelId,
+            otp: otp,
+            phone: phone
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SMS_API_SECRET}`
+            },
+            timeout: 15000
         });
-        
-        console.log(`✓ OTP posted to channel for phone ending in ${last4Digits}`);
-        return true;
+
+        if (response.data && response.data.success) {
+            console.log(`✓ OTP posted to channel for phone ending in ${phone.slice(-4)}`);
+            return true;
+        }
+        return false;
     } catch (error) {
-        console.error('Error sending OTP to channel:', error);
+        console.error('Error sending OTP to channel:', error.message);
         return false;
     }
 };
 
 /**
- * Send welcome message when user starts the bot
- * @param {number} chatId - Telegram chat ID
- * @returns {Promise<void>}
+ * Send welcome message - Not used with PHP service
  */
 const sendWelcomeMessage = async (chatId) => {
-    if (!bot) return;
-
-    try {
-        const message = `👋 *Welcome to Livestock Platform Bot!*\n\n` +
-            `This bot will send you OTP codes for login and registration.\n\n` +
-            `To link your phone number, send:\n` +
-            `/link <your_phone_number>\n\n` +
-            `Example: /link +251912345678\n\n` +
-            `⚠️ Make sure to use the same phone number you use on the platform.`;
-
-        await bot.sendMessage(chatId, message, {
-            parse_mode: 'Markdown'
-        });
-    } catch (error) {
-        console.error('Error sending welcome message:', error);
-    }
+    console.log('Welcome message would be sent to:', chatId);
+    // This is handled by the bot handlers if needed
 };
 
 /**
- * Send confirmation when phone is linked
- * @param {number} chatId - Telegram chat ID
- * @param {string} phone - Phone number
- * @returns {Promise<void>}
+ * Send link confirmation - Not used with PHP service
  */
 const sendLinkConfirmation = async (chatId, phone) => {
-    if (!bot) return;
-
-    try {
-        const message = `✅ *Phone Number Linked!*\n\n` +
-            `Your phone number ${phone} has been successfully linked to this Telegram account.\n\n` +
-            `You will now receive OTP codes here for login and registration.`;
-
-        await bot.sendMessage(chatId, message, {
-            parse_mode: 'Markdown'
-        });
-    } catch (error) {
-        console.error('Error sending link confirmation:', error);
-    }
+    console.log('Link confirmation would be sent to:', chatId, 'for phone:', phone);
 };
 
 /**
- * Send error message
- * @param {number} chatId - Telegram chat ID
- * @param {string} errorMessage - Error message
- * @returns {Promise<void>}
+ * Send error message - Not used with PHP service
  */
 const sendErrorMessage = async (chatId, errorMessage) => {
-    if (!bot) return;
-
-    try {
-        await bot.sendMessage(chatId, `❌ Error: ${errorMessage}`);
-    } catch (error) {
-        console.error('Error sending error message:', error);
-    }
+    console.log('Error message would be sent to:', chatId, ':', errorMessage);
 };
 
 /**
- * Get bot instance (for setting up handlers)
- * @returns {TelegramBot|null}
+ * Get bot instance - Returns null as we use external PHP service
  */
-const getBot = () => bot;
+const getBot = () => null;
+
+/**
+ * Get bot username for deep links
+ */
+const getBotUsername = () => TELEGRAM_BOT_USERNAME;
 
 module.exports = {
     sendOTP,
@@ -253,6 +163,6 @@ module.exports = {
     sendWelcomeMessage,
     sendLinkConfirmation,
     sendErrorMessage,
-    getBot
+    getBot,
+    getBotUsername
 };
-
