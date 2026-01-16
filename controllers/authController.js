@@ -3,13 +3,12 @@ const { User, TelegramMapping } = require('../models');
 const jwtConfig = require('../config/jwt');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { generateOTP, hashOTP, verifyOTP, getOTPExpiration } = require('../utils/otpGenerator');
-const { sendOTP } = require('../services/telegramBot');
 
 // Temporary OTP storage (in production, use Redis or database)
 const otpStore = new Map();
 
-// Temporary linking token storage (in production, use Redis)
-const linkingTokens = new Map();
+// Bot username (configured via env)
+const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'ethiolivestock_bot';
 
 /**
  * User registration
@@ -59,8 +58,7 @@ const register = async (req, res, next) => {
  */
 const loginWithPhone = async (req, res, next) => {
     try {
-
-        const { phone, telegram_username } = req.body;
+        const { phone } = req.body;
 
         if (!phone) {
             return sendError(res, 400, 'Phone number is required');
@@ -70,209 +68,64 @@ const loginWithPhone = async (req, res, next) => {
         const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
 
         // Check if user exists (for login) or doesn't exist (for registration)
-        const user = await User.findOne({ where: { phone: normalizedPhone, role: 'Buyer' } });
-        const isNewUser = !user; // Determine if this is a new user
-        
-        // Note: We allow OTP generation even if user doesn't exist (for registration flow)
-
-        // Optional: Try to auto-link if telegram_username is provided
-        if (telegram_username) {
-            try {
-                const { getBot } = require('../services/telegramBot');
-                const bot = getBot();
-                if (bot) {
-                    // Try to get user by username
-                    const chat = await bot.getChat(`@${telegram_username.replace('@', '')}`);
-                    if (chat && chat.id) {
-                        // Auto-create or update mapping
-                        const [mapping] = await TelegramMapping.findOrCreate({
-                            where: { phone: normalizedPhone },
-                            defaults: {
-                                telegram_user_id: chat.id,
-                                telegram_username: telegram_username.replace('@', ''),
-                                is_verified: false
-                            }
-                        });
-                        
-                        if (!mapping.telegram_user_id || mapping.telegram_user_id !== chat.id) {
-                            await mapping.update({
-                                telegram_user_id: chat.id,
-                                telegram_username: telegram_username.replace('@', '')
-                            });
-                        }
-                        console.log(`Auto-linked phone ${normalizedPhone} to Telegram @${telegram_username}`);
-                    }
-                }
-            } catch (linkError) {
-                // If auto-linking fails, continue without it (not critical)
-                console.log(`Auto-link failed for ${telegram_username}: ${linkError.message}`);
-            }
-        }
+        const user = await User.findOne({ where: { phone: normalizedPhone } });
+        const isNewUser = !user;
 
         // Generate OTP
         const otp = generateOTP();
         const otpHash = await hashOTP(otp);
         const expiresAt = getOTPExpiration();
 
-        // Store OTP (in production, use Redis or database)
+        // Store OTP
         otpStore.set(normalizedPhone, { otpHash, expiresAt });
 
-        // Generate a temporary linking token for automatic linking
-        const linkingToken = require('crypto').randomBytes(16).toString('hex');
-        const tokenExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-        // Store linking token with OTP for automatic sending after link
-        linkingTokens.set(linkingToken, {
-            phone: normalizedPhone,
-            otp: otp, // Store OTP so we can send it after linking
-            expiresAt: tokenExpiry
-        });
-
-        // Try to send OTP via Telegram bot (automatic - no linking required)
+        // Try to send OTP via PHP Telegram service
         let otpSent = false;
-        let otpSentMethod = null;
+        let telegramLinked = false;
+
         try {
-            const { sendOTPByPhone, sendOTP } = require('../services/telegramBot');
-            
-            // First, try existing mapping (if user linked before)
+            const { sendOTP } = require('../services/telegramBot');
+
+            // Check if user has Telegram linked
             const mapping = await TelegramMapping.findOne({
                 where: { phone: normalizedPhone }
             });
 
             if (mapping && mapping.telegram_user_id) {
+                telegramLinked = true;
                 otpSent = await sendOTP(mapping.telegram_user_id, otp, normalizedPhone);
                 if (otpSent) {
-                    otpSentMethod = 'existing_mapping';
                     await mapping.update({ last_otp_sent_at: new Date() });
-                }
-            }
-
-            // If not sent via mapping, try automatic phone-based sending
-            if (!otpSent) {
-                const result = await sendOTPByPhone(normalizedPhone, otp);
-                if (result.success) {
-                    otpSent = true;
-                    otpSentMethod = result.method;
-                    
-                    // If we found the user, create/update mapping for future use
-                    if (result.userId) {
-                        await TelegramMapping.findOrCreate({
-                            where: { phone: normalizedPhone },
-                            defaults: {
-                                telegram_user_id: result.userId,
-                                phone: normalizedPhone,
-                                is_verified: false
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Alternative: Try sending via public channel if configured
-            if (!otpSent && process.env.TELEGRAM_OTP_CHANNEL_ID) {
-                const { sendOTPViaChannel } = require('../services/telegramBot');
-                otpSent = await sendOTPViaChannel(normalizedPhone, otp, process.env.TELEGRAM_OTP_CHANNEL_ID);
-                if (otpSent) {
-                    otpSentMethod = 'public_channel';
+                    console.log(`✓ OTP sent to Telegram user ${mapping.telegram_user_id} for ${normalizedPhone}`);
                 }
             }
         } catch (error) {
-            console.error('Error sending OTP via Telegram:', error);
+            console.error('Error sending OTP via Telegram:', error.message);
         }
 
-        // If Telegram sending failed or user not linked, still allow OTP generation
-        // In development, return OTP in response. In production, log it.
-        if (!otpSent) {
-            console.log(`OTP for ${normalizedPhone}: ${otp} (Telegram not available or user not linked)`);
-            
-            // Try to get bot username for helpful message
-            let botInfo = '';
-            let botUsername = 'ethiolivestock_bot';
-            try {
-                const { getBot } = require('../services/telegramBot');
-                const bot = getBot();
-                if (bot) {
-                    const me = await bot.getMe();
-                    botInfo = `@${me.username}`;
-                    botUsername = me.username;
-                }
-            } catch (e) {
-                console.warn('Could not get bot info (likely network issue):', e.message);
-                botInfo = '@ethiolivestock_bot';
+        // Always return success - OTP is generated
+        // If Telegram failed, return OTP in response for now
+        const returnOTP = !otpSent || process.env.NODE_ENV === 'development';
+
+        return sendSuccess(res, 200,
+            otpSent
+                ? 'OTP sent to your Telegram'
+                : telegramLinked
+                    ? 'OTP generated (Telegram delivery failed - use code below)'
+                    : 'OTP generated - link Telegram for automatic delivery',
+            {
+                message: otpSent
+                    ? 'Please check your Telegram for the OTP code'
+                    : 'Enter the OTP code to continue',
+                otp: returnOTP ? otp : undefined,
+                telegram_linked: telegramLinked,
+                telegram_connection_failed: telegramLinked && !otpSent,
+                is_new_user: isNewUser,
+                telegram_bot_username: TELEGRAM_BOT_USERNAME,
+                // Simple bot link (no complex linking tokens needed)
+                telegram_bot_link: `https://t.me/${TELEGRAM_BOT_USERNAME}`
             }
-
-            // In development mode, return OTP in response even if not linked
-            // Also return OTP if Telegram connection failed (network issues)
-            const isDevelopment = process.env.NODE_ENV === 'development';
-            const telegramConnectionFailed = !botInfo || botInfo === '@ethiolivestock_bot';
-            
-            // Generate Telegram deep link for automatic linking
-            let telegramDeepLink = null;
-            try {
-                const linkingToken = Array.from(linkingTokens.keys()).find(key => 
-                    linkingTokens.get(key).phone === normalizedPhone
-                );
-                if (linkingToken) {
-                    telegramDeepLink = `https://t.me/${botUsername}?start=link_${linkingToken}`;
-                }
-            } catch (e) {
-                console.error('Error generating deep link:', e);
-            }
-
-            return sendSuccess(res, 200, 
-                telegramConnectionFailed
-                    ? 'OTP generated. Telegram connection unavailable - check console for OTP.'
-                    : 'OTP generated. Please link your Telegram to receive OTP automatically.',
-                {
-                    message: telegramConnectionFailed
-                        ? 'Telegram API connection failed. OTP generated but not sent via Telegram.'
-                        : telegramDeepLink 
-                            ? `Click the link below to automatically link your Telegram and receive OTP codes instantly!`
-                            : 'OTP generated successfully',
-                    otp: (isDevelopment || telegramConnectionFailed) ? otp : undefined, // Return OTP if dev mode or Telegram failed
-                    telegram_linked: false,
-                    telegram_connection_failed: telegramConnectionFailed,
-                    telegram_deep_link: telegramDeepLink,
-                    linking_token: telegramDeepLink ? telegramDeepLink.split('link_')[1] : null,
-                    instructions: telegramConnectionFailed
-                        ? `Network issue connecting to Telegram. OTP: ${otp} (check server console)`
-                        : telegramDeepLink 
-                            ? `Click this link to automatically link your Telegram: ${telegramDeepLink}`
-                            : botInfo 
-                                ? `For automatic OTP delivery, link your phone: Start ${botInfo} and send /link ${normalizedPhone}`
-                                : 'Link your Telegram bot for automatic OTP delivery',
-                    note: telegramConnectionFailed
-                        ? '⚠️ Telegram API connection timeout. Please check your network connection or use the OTP shown in development mode.'
-                        : telegramDeepLink 
-                            ? 'After clicking the link, your phone will be linked and you\'ll receive the OTP automatically via Telegram!'
-                            : 'Link your Telegram bot for automatic OTP delivery in the future',
-                    is_new_user: isNewUser,
-                    telegram_bot_username: botUsername
-                }
-            );
-        }
-
-        // Get bot username for response
-        let botUsername = 'ethiolivestock_bot';
-        try {
-            const { getBot } = require('../services/telegramBot');
-            const bot = getBot();
-            if (bot) {
-                const me = await bot.getMe();
-                botUsername = me.username;
-            }
-        } catch (e) {
-            console.error('Error getting bot info:', e);
-        }
-
-        return sendSuccess(res, 200, 'OTP sent to your Telegram', {
-            message: 'Please check your Telegram for the OTP code',
-            // In development, also return OTP for testing
-            otp: process.env.NODE_ENV === 'development' ? otp : undefined,
-            telegram_linked: true,
-            is_new_user: isNewUser,
-            telegram_bot_username: botUsername
-        });
+        );
     } catch (error) {
         next(error);
     }
@@ -350,7 +203,6 @@ const verifyOTPHandler = async (req, res, next) => {
         // Get stored OTP
         const otpData = otpStore.get(normalizedPhone);
         console.log('[OTP Verify] OTP data found:', otpData ? 'yes' : 'no');
-        console.log('[OTP Verify] All stored phones:', Array.from(otpStore.keys()));
 
         if (!otpData) {
             return sendError(res, 400, 'OTP not found or expired. Please request a new one.');
@@ -364,7 +216,6 @@ const verifyOTPHandler = async (req, res, next) => {
 
         // Verify OTP - ensure otp is a string
         const otpString = String(otp).trim();
-        console.log('[OTP Verify] Comparing OTP (string):', otpString, 'length:', otpString.length);
         const isValid = await verifyOTP(otpString, otpData.otpHash);
         console.log('[OTP Verify] OTP valid:', isValid);
 
@@ -377,7 +228,7 @@ const verifyOTPHandler = async (req, res, next) => {
 
         // Find or create user
         let user = await User.findOne({ where: { phone: normalizedPhone } });
-        const isNewUser = !user; // Track if this is a new user BEFORE creating
+        const isNewUser = !user;
 
         // If user doesn't exist, create a new Buyer account
         if (!user) {
@@ -386,7 +237,7 @@ const verifyOTPHandler = async (req, res, next) => {
                 phone: normalizedPhone,
                 email: null,
                 password_hash: null,
-                address: name || null // Store name in address field temporarily, or use metadata
+                address: name || null
             });
             console.log(`New user created via OTP: ${user.user_id}`);
         }
@@ -409,7 +260,7 @@ const verifyOTPHandler = async (req, res, next) => {
                 role: user.role,
                 phone: user.phone,
                 email: user.email || null,
-                is_new_user: isNewUser // Use the isNewUser variable we calculated earlier
+                is_new_user: isNewUser
             }
         });
     } catch (error) {
@@ -473,6 +324,5 @@ module.exports = {
     loginWithEmail,
     adminLogin,
     verifyOTP: verifyOTPHandler,
-    otpStore,
-    linkingTokens
+    otpStore
 };
