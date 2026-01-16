@@ -56,63 +56,68 @@ app.use(errorHandler);
 // Server configuration
 const PORT = process.env.PORT || 5000;
 
-// Database connection and server start
-const startServer = async () => {
+// Check if running on cPanel/LiteSpeed (lsnode.js sets this)
+const isLiteSpeed = typeof process.env.LSWS_CHILDREN !== 'undefined' ||
+    process.argv.some(arg => arg.includes('lsnode'));
+
+// Database connection and server initialization
+const initializeApp = async () => {
     try {
         // Test database connection
         await db.sequelize.authenticate();
         console.log('✓ Database connection established successfully');
 
         // Sync models with database
-        // In production, use migrations instead of sync
         // Using alter: false to avoid "too many keys" MySQL errors
-        // If schema changes are needed, use migrations instead
         try {
             await db.sequelize.sync({ alter: false });
-            console.log('✓ Database models synchronized (no alter - tables preserved)');
-
-            // Setup Telegram bot handlers after DB sync
-            setupBotHandlers();
+            console.log('✓ Database models synchronized');
         } catch (syncError) {
-            // If sync fails due to too many keys or other issues, try without alter
-            if (syncError.message && syncError.message.includes('Too many keys')) {
-                console.warn('⚠ Database sync warning: Too many keys detected. Using safe sync mode.');
-                try {
-                    await db.sequelize.sync({ alter: false });
-                    console.log('✓ Database models synchronized (safe mode)');
-                } catch (safeSyncError) {
-                    console.warn('⚠ Could not sync database schema. Tables may need manual migration.');
-                    console.warn('   Error:', safeSyncError.message);
-                }
-            } else {
-                // For other sync errors, log but continue
-                console.warn('⚠ Database sync warning:', syncError.message);
-                console.warn('   Server will continue, but schema may need manual updates.');
-            }
+            console.warn('⚠ Database sync warning:', syncError.message);
+            console.warn('   Tables may need manual migration if schema changed.');
         }
 
-        // Start server
-        app.listen(PORT, () => {
-            console.log('═══════════════════════════════════════════');
-            console.log(`✓ Ethio Livestock API Server Running`);
-            console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`✓ Port: ${PORT}`);
-            console.log(`✓ API Base URL: http://localhost:${PORT}/api/v1`);
-            console.log('═══════════════════════════════════════════');
-        });
+        // Setup Telegram bot handlers after DB sync
+        setupBotHandlers();
+
+        console.log('✓ Application initialized successfully');
+        console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+
     } catch (error) {
-        console.error('✗ Unable to start server:', error);
-        process.exit(1);
+        console.error('✗ Database connection failed:', error.message);
+        // Don't exit on cPanel - let the request fail gracefully
+        if (!isLiteSpeed) {
+            process.exit(1);
+        }
     }
 };
+
+// Initialize the application
+initializeApp();
+
+// Only call app.listen() if NOT running on cPanel/LiteSpeed
+// LiteSpeed handles the server binding via lsnode.js
+if (!isLiteSpeed) {
+    app.listen(PORT, () => {
+        console.log('═══════════════════════════════════════════');
+        console.log(`✓ Ethio Livestock API Server Running`);
+        console.log(`✓ Port: ${PORT}`);
+        console.log(`✓ API Base URL: http://localhost:${PORT}/api/v1`);
+        console.log('═══════════════════════════════════════════');
+    });
+} else {
+    console.log('✓ Running on LiteSpeed/cPanel - server binding handled by lsnode.js');
+}
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
     console.error('Unhandled Promise Rejection:', err);
-    process.exit(1);
+    // Don't exit on cPanel
+    if (!isLiteSpeed) {
+        process.exit(1);
+    }
 });
 
-// Start the server
-startServer();
-
+// Export app for LiteSpeed and testing
 module.exports = app;
+
