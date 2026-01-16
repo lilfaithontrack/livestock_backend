@@ -5,14 +5,14 @@ const authController = require('../controllers/authController');
 // User registration
 router.post('/register', authController.register);
 
-// Login with phone (Buyer)
-router.post('/login/phone', authController.loginWithPhone);
+// Login with email OTP (Buyer) - New method
+router.post('/login/email-otp', authController.loginWithEmailOTP);
 
-// Login with email (Seller/Agent)
+// Verify email OTP
+router.post('/verify-email-otp', authController.verifyEmailOTP);
+
+// Login with email and password (Seller/Agent)
 router.post('/login/email', authController.loginWithEmail);
-
-// Verify OTP
-router.post('/verify-otp', authController.verifyOTP);
 
 // Admin login
 router.post('/admin/login', authController.adminLogin);
