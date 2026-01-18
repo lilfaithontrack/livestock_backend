@@ -257,6 +257,17 @@ const Product = sequelize.define('products', {
         defaultValue: [],
         comment: 'Array of product video URLs'
     },
+    youtube_video_url: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'YouTube video URL for product showcase'
+    },
+    social_media_links: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: {},
+        comment: 'Social media links {facebook, instagram, tiktok, twitter, telegram}'
+    },
 
     // === MARKETPLACE FEATURES ===
     featured: {

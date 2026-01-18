@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const productController = require('../controllers/productController');
+const productTypeController = require('../controllers/productTypeController');
 const verifyToken = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/roleMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -40,6 +41,16 @@ router.put('/products/:id', upload.array('images', 10), productController.update
 
 // Delete product (admin)
 router.delete('/products/:id', productController.deleteProduct);
+
+// ===== PRODUCT TYPE ROUTES =====
+// Create product type
+router.post('/product-types', productTypeController.createProductType);
+
+// Update product type
+router.put('/product-types/:id', productTypeController.updateProductType);
+
+// Delete product type
+router.delete('/product-types/:id', productTypeController.deleteProductType);
 
 // Get all orders (admin view)
 router.get('/orders', adminController.getAllOrders);

@@ -2,6 +2,7 @@ const sequelize = require('../config/database');
 
 // Import all models
 const User = require('./User');
+const ProductType = require('./ProductType');
 const ProductCategory = require('./ProductCategory');
 const ProductSubcategory = require('./ProductSubcategory');
 const Product = require('./Product');
@@ -32,7 +33,11 @@ User.hasMany(SellerPlan, { foreignKey: 'seller_id', as: 'seller_plans' });
 User.belongsTo(SellerPlan, { foreignKey: 'current_plan_id', as: 'current_plan' });
 User.hasMany(QerchaPackage, { foreignKey: 'host_user_id', as: 'hosted_packages' });
 
+// ProductType Associations
+ProductType.hasMany(ProductCategory, { foreignKey: 'product_type_id', as: 'categories' });
+
 // ProductCategory Associations
+ProductCategory.belongsTo(ProductType, { foreignKey: 'product_type_id', as: 'productType' });
 ProductCategory.hasMany(ProductSubcategory, { foreignKey: 'cat_id', as: 'subcategories' });
 
 // ProductSubcategory Associations
@@ -101,6 +106,7 @@ StockMovement.belongsTo(User, { foreignKey: 'performed_by', as: 'performer' });
 const db = {
     sequelize,
     User,
+    ProductType,
     ProductCategory,
     ProductSubcategory,
     Product,

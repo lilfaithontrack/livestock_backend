@@ -39,8 +39,8 @@ const createProduct = async (req, res, next) => {
             certificate_urls, license_numbers, organic_certified,
             // Marketplace Features
             featured, tags,
-            // Media (video_urls handled separately)
-            video_urls,
+            // Media
+            video_urls, youtube_video_url, social_media_links,
             // Metadata
             metadata,
             // Admin-only: seller_id
@@ -148,6 +148,8 @@ const createProduct = async (req, res, next) => {
             // Media
             image_urls,
             video_urls: video_urls ? JSON.parse(video_urls) : [],
+            youtube_video_url,
+            social_media_links: social_media_links ? (typeof social_media_links === 'string' ? JSON.parse(social_media_links) : social_media_links) : {},
 
             // Marketplace Features
             featured: featured || false,
@@ -393,7 +395,7 @@ const updateProduct = async (req, res, next) => {
             // Certifications & Compliance
             certificate_urls, license_numbers, organic_certified,
             // Media
-            video_urls,
+            video_urls, youtube_video_url, social_media_links,
             // Marketplace Features
             tags,
             // Metadata
@@ -517,6 +519,8 @@ const updateProduct = async (req, res, next) => {
 
         // Media
         if (video_urls !== undefined) updates.video_urls = JSON.parse(video_urls);
+        if (youtube_video_url !== undefined) updates.youtube_video_url = youtube_video_url;
+        if (social_media_links !== undefined) updates.social_media_links = typeof social_media_links === 'string' ? JSON.parse(social_media_links) : social_media_links;
 
         // Marketplace Features
         if (tags !== undefined) updates.tags = tags;
@@ -677,7 +681,7 @@ const createProductWithQercha = async (req, res, next) => {
             // Marketplace Features
             featured, tags,
             // Media
-            video_urls,
+            video_urls, youtube_video_url, social_media_links,
             // Metadata
             metadata,
             // Admin-only: seller_id
@@ -758,6 +762,8 @@ const createProductWithQercha = async (req, res, next) => {
             organic_certified: organic_certified || false,
             image_urls,
             video_urls: video_urls ? JSON.parse(video_urls) : [],
+            youtube_video_url,
+            social_media_links: social_media_links ? (typeof social_media_links === 'string' ? JSON.parse(social_media_links) : social_media_links) : {},
             featured: featured || false,
             tags: tags ? JSON.parse(tags) : [],
             metadata: metadata ? JSON.parse(metadata) : {},
