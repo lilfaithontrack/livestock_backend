@@ -224,11 +224,106 @@ const deleteProductType = async (req, res, next) => {
     }
 };
 
+/**
+ * Assign categories to a product type (Admin only)
+ * PUT /api/v1/admin/product-types/:id/categories
+ * Body: { category_ids: ['uuid1', 'uuid2', ...] }
+ */
+const assignCategories = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { category_ids } = req.body;
+
+        const productType = await ProductType.findByPk(id);
+        if (!productType) {
+            return sendError(res, 404, 'Product type not found');
+        }
+
+        if (!category_ids || !Array.isArray(category_ids)) {
+            return sendError(res, 400, 'category_ids must be an array');
+        }
+
+        // Update all specified categories to belong to this product type
+        const [updatedCount] = await ProductCategory.update(
+            { product_type_id: id },
+            { where: { cat_id: category_ids } }
+        );
+
+        // Fetch updated categories
+        const categories = await ProductCategory.findAll({
+            where: { product_type_id: id },
+            attributes: ['cat_id', 'name', 'slug', 'image_url'],
+            order: [['display_order', 'ASC'], ['name', 'ASC']]
+        });
+
+        return sendSuccess(res, 200, `${updatedCount} categories assigned to product type`, {
+            product_type: { type_id: productType.type_id, name: productType.name },
+            categories,
+            count: categories.length
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Remove category from product type (Admin only)
+ * DELETE /api/v1/admin/product-types/:id/categories/:catId
+ */
+const removeCategoryFromType = async (req, res, next) => {
+    try {
+        const { id, catId } = req.params;
+
+        const category = await ProductCategory.findOne({
+            where: { cat_id: catId, product_type_id: id }
+        });
+
+        if (!category) {
+            return sendError(res, 404, 'Category not found in this product type');
+        }
+
+        await category.update({ product_type_id: null });
+
+        return sendSuccess(res, 200, 'Category removed from product type');
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get all categories (for assigning to product types)
+ * GET /api/v1/admin/product-types/available-categories
+ */
+const getAvailableCategories = async (req, res, next) => {
+    try {
+        const categories = await ProductCategory.findAll({
+            attributes: ['cat_id', 'name', 'slug', 'image_url', 'product_type_id'],
+            order: [['name', 'ASC']],
+            include: [{
+                model: ProductType,
+                as: 'productType',
+                attributes: ['type_id', 'name'],
+                required: false
+            }]
+        });
+
+        return sendSuccess(res, 200, 'Categories retrieved successfully', {
+            categories,
+            count: categories.length
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getAllProductTypes,
     getProductTypeById,
     getProductTypeCategories,
     createProductType,
     updateProductType,
-    deleteProductType
+    deleteProductType,
+    assignCategories,
+    removeCategoryFromType,
+    getAvailableCategories
 };

@@ -52,6 +52,15 @@ router.put('/product-types/:id', productTypeController.updateProductType);
 // Delete product type
 router.delete('/product-types/:id', productTypeController.deleteProductType);
 
+// Get all categories for assignment
+router.get('/product-types/available-categories', productTypeController.getAvailableCategories);
+
+// Assign categories to product type
+router.put('/product-types/:id/categories', productTypeController.assignCategories);
+
+// Remove category from product type
+router.delete('/product-types/:id/categories/:catId', productTypeController.removeCategoryFromType);
+
 // Get all orders (admin view)
 router.get('/orders', adminController.getAllOrders);
 
