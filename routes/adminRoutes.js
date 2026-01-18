@@ -43,6 +43,9 @@ router.put('/products/:id', upload.array('images', 10), productController.update
 router.delete('/products/:id', productController.deleteProduct);
 
 // ===== PRODUCT TYPE ROUTES =====
+// Get all categories for assignment (must be before :id routes)
+router.get('/product-types/available-categories', productTypeController.getAvailableCategories);
+
 // Create product type
 router.post('/product-types', productTypeController.createProductType);
 
@@ -51,9 +54,6 @@ router.put('/product-types/:id', productTypeController.updateProductType);
 
 // Delete product type
 router.delete('/product-types/:id', productTypeController.deleteProductType);
-
-// Get all categories for assignment
-router.get('/product-types/available-categories', productTypeController.getAvailableCategories);
 
 // Assign categories to product type
 router.put('/product-types/:id/categories', productTypeController.assignCategories);
