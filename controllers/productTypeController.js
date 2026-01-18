@@ -124,7 +124,7 @@ const getProductTypeCategories = async (req, res, next) => {
  */
 const createProductType = async (req, res, next) => {
     try {
-        const { name, slug, description, icon_url, image_url, display_order, is_active, metadata } = req.body;
+        const { name, slug, description, icon_url, image_url, display_order, is_active, metadata, category_ids } = req.body;
 
         if (!name) {
             return sendError(res, 400, 'Product type name is required');
@@ -147,8 +147,33 @@ const createProductType = async (req, res, next) => {
             metadata: metadata || {}
         });
 
+        // If category_ids provided, assign categories to this product type
+        let assignedCategories = [];
+        if (category_ids && Array.isArray(category_ids) && category_ids.length > 0) {
+            await ProductCategory.update(
+                { product_type_id: productType.type_id },
+                { where: { cat_id: category_ids } }
+            );
+            
+            // Fetch assigned categories
+            assignedCategories = await ProductCategory.findAll({
+                where: { product_type_id: productType.type_id },
+                attributes: ['cat_id', 'name', 'slug', 'image_url', 'display_order'],
+                order: [['display_order', 'ASC'], ['name', 'ASC']]
+            });
+        }
+
+        // Reload product type with categories
+        const result = await ProductType.findByPk(productType.type_id, {
+            include: [{
+                model: ProductCategory,
+                as: 'categories',
+                attributes: ['cat_id', 'name', 'slug', 'image_url', 'display_order']
+            }]
+        });
+
         return sendSuccess(res, 201, 'Product type created successfully', {
-            product_type: productType
+            product_type: result
         });
     } catch (error) {
         next(error);
@@ -162,7 +187,7 @@ const createProductType = async (req, res, next) => {
 const updateProductType = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { name, slug, description, icon_url, image_url, display_order, is_active, metadata } = req.body;
+        const { name, slug, description, icon_url, image_url, display_order, is_active, metadata, category_ids } = req.body;
 
         const productType = await ProductType.findByPk(id);
         if (!productType) {
@@ -189,8 +214,34 @@ const updateProductType = async (req, res, next) => {
 
         await productType.update(updates);
 
+        // If category_ids provided, update category assignments
+        if (category_ids !== undefined && Array.isArray(category_ids)) {
+            // First, remove this product type from all categories currently assigned to it
+            await ProductCategory.update(
+                { product_type_id: null },
+                { where: { product_type_id: id } }
+            );
+            
+            // Then assign the new categories
+            if (category_ids.length > 0) {
+                await ProductCategory.update(
+                    { product_type_id: id },
+                    { where: { cat_id: category_ids } }
+                );
+            }
+        }
+
+        // Reload product type with categories
+        const result = await ProductType.findByPk(id, {
+            include: [{
+                model: ProductCategory,
+                as: 'categories',
+                attributes: ['cat_id', 'name', 'slug', 'image_url', 'display_order']
+            }]
+        });
+
         return sendSuccess(res, 200, 'Product type updated successfully', {
-            product_type: productType
+            product_type: result
         });
     } catch (error) {
         next(error);
