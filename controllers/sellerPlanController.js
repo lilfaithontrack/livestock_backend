@@ -1,6 +1,14 @@
 const { SellerPlan, User, Product } = require('../models');
 const { Op } = require('sequelize');
 
+// Commission settings (can be updated by admin)
+let COMMISSION_SETTINGS = {
+    default_rate: 15.00,
+    min_rate: 5.00,
+    max_rate: 30.00,
+    description: 'Commission deducted from each sale'
+};
+
 // Predefined subscription tiers
 const SUBSCRIPTION_TIERS = {
     basic: {
@@ -749,5 +757,66 @@ exports.updateSubscriptionTier = async (req, res) => {
     } catch (error) {
         console.error('Error updating subscription tier:', error);
         res.status(500).json({ error: 'Failed to update subscription tier' });
+    }
+};
+
+exports.getCommissionSettings = async (req, res) => {
+    try {
+        res.json({ 
+            commission: COMMISSION_SETTINGS,
+            message: 'Commission settings for commission-based plans'
+        });
+    } catch (error) {
+        console.error('Error fetching commission settings:', error);
+        res.status(500).json({ error: 'Failed to fetch commission settings' });
+    }
+};
+
+exports.updateCommissionSettings = async (req, res) => {
+    try {
+        const { default_rate, min_rate, max_rate, description } = req.body;
+
+        if (default_rate !== undefined) {
+            if (default_rate < 0 || default_rate > 100) {
+                return res.status(400).json({ error: 'Default rate must be between 0 and 100' });
+            }
+            COMMISSION_SETTINGS.default_rate = parseFloat(default_rate);
+        }
+
+        if (min_rate !== undefined) {
+            if (min_rate < 0 || min_rate > 100) {
+                return res.status(400).json({ error: 'Min rate must be between 0 and 100' });
+            }
+            COMMISSION_SETTINGS.min_rate = parseFloat(min_rate);
+        }
+
+        if (max_rate !== undefined) {
+            if (max_rate < 0 || max_rate > 100) {
+                return res.status(400).json({ error: 'Max rate must be between 0 and 100' });
+            }
+            COMMISSION_SETTINGS.max_rate = parseFloat(max_rate);
+        }
+
+        if (description !== undefined) {
+            COMMISSION_SETTINGS.description = description;
+        }
+
+        if (COMMISSION_SETTINGS.min_rate > COMMISSION_SETTINGS.max_rate) {
+            return res.status(400).json({ error: 'Min rate cannot be greater than max rate' });
+        }
+
+        if (COMMISSION_SETTINGS.default_rate < COMMISSION_SETTINGS.min_rate || 
+            COMMISSION_SETTINGS.default_rate > COMMISSION_SETTINGS.max_rate) {
+            return res.status(400).json({ error: 'Default rate must be between min and max rates' });
+        }
+
+        res.json({
+            message: 'Commission settings updated successfully',
+            commission: COMMISSION_SETTINGS
+        });
+
+    } catch (error) {
+        console.error('Error updating commission settings:', error);
+        res.status(500).json({ error: 'Failed to update commission settings' });
     }
 };

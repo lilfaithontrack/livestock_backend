@@ -86,6 +86,18 @@ router.put(
     sellerPlanController.updateSubscriptionTier
 );
 
+router.get(
+    '/commission',
+    sellerPlanController.getCommissionSettings
+);
+
+router.put(
+    '/commission',
+    verifyToken,
+    requireRole(['Admin']),
+    sellerPlanController.updateCommissionSettings
+);
+
 router.post(
     '/admin/create',
     verifyToken,
