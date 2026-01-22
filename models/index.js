@@ -20,6 +20,9 @@ const Advertisement = require('./Advertisement');
 const Butcher = require('./Butcher');
 const StockMovement = require('./StockMovement');
 const TelegramMapping = require('./TelegramMapping');
+const AdminBankAccount = require('./AdminBankAccount');
+const SellerBankAccount = require('./SellerBankAccount');
+const SellerEarnings = require('./SellerEarnings');
 
 // Define Associations
 
@@ -102,6 +105,20 @@ SellerPlan.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
 StockMovement.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 StockMovement.belongsTo(User, { foreignKey: 'performed_by', as: 'performer' });
 
+// SellerBankAccount Associations
+SellerBankAccount.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });
+User.hasMany(SellerBankAccount, { foreignKey: 'seller_id', as: 'bank_accounts' });
+
+// SellerEarnings Associations
+SellerEarnings.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });
+SellerEarnings.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+SellerEarnings.belongsTo(SellerPayout, { foreignKey: 'payout_id', as: 'payout' });
+User.hasMany(SellerEarnings, { foreignKey: 'seller_id', as: 'earnings' });
+SellerPayout.hasMany(SellerEarnings, { foreignKey: 'payout_id', as: 'earnings' });
+
+// SellerPayout additional associations
+SellerPayout.belongsTo(User, { foreignKey: 'processed_by', as: 'processor' });
+
 // Export all models and sequelize instance
 const db = {
     sequelize,
@@ -123,7 +140,10 @@ const db = {
     Advertisement,
     Butcher,
     StockMovement,
-    TelegramMapping
+    TelegramMapping,
+    AdminBankAccount,
+    SellerBankAccount,
+    SellerEarnings
 };
 
 module.exports = db;

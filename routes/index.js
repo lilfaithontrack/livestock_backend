@@ -18,6 +18,11 @@ const stockRoutes = require('./stockRoutes');
 const sellerPlanRoutes = require('./sellerPlanRoutes');
 const paymentRoutes = require('./paymentRoutes');
 const productTypeRoutes = require('./productTypeRoutes');
+const adminBankAccountRoutes = require('./adminBankAccountRoutes');
+const sellerBankAccountRoutes = require('./sellerBankAccountRoutes');
+const withdrawalRoutes = require('./withdrawalRoutes');
+const earningsRoutes = require('./earningsRoutes');
+const paymentAccountRoutes = require('./paymentAccountRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -36,7 +41,11 @@ router.use('/', stockRoutes); // Stock routes (has its own seller/admin prefixes
 router.use('/seller-plans', sellerPlanRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/product-types', productTypeRoutes);
-
+router.use('/admin/bank-accounts', adminBankAccountRoutes);
+router.use('/seller/bank-accounts', sellerBankAccountRoutes);
+router.use('/withdrawals', withdrawalRoutes);
+router.use('/earnings', earningsRoutes);
+router.use('/payment-accounts', paymentAccountRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {

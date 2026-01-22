@@ -17,16 +17,82 @@ const SellerPayout = sequelize.define('seller_payouts', {
     },
     amount: {
         type: DataTypes.DECIMAL(10, 2),
-        allowNull: false
+        allowNull: false,
+        comment: 'Withdrawal amount requested'
+    },
+    bank_name: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Seller bank name for payout'
+    },
+    account_name: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+        comment: 'Seller account holder name'
+    },
+    account_number: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Seller bank account number'
+    },
+    status: {
+        type: DataTypes.ENUM('Pending', 'Approved', 'Processing', 'Completed', 'Rejected'),
+        defaultValue: 'Pending',
+        comment: 'Withdrawal request status'
+    },
+    request_date: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
+        comment: 'When withdrawal was requested'
+    },
+    processed_date: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'When withdrawal was processed'
+    },
+    processed_by: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'users',
+            key: 'user_id'
+        },
+        comment: 'Admin who processed the withdrawal'
+    },
+    payment_proof_url: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'Admin uploads proof of payment to seller'
+    },
+    transaction_reference: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Bank transaction reference'
+    },
+    rejection_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Reason if withdrawal is rejected'
+    },
+    notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Additional notes'
     },
     payout_date: {
         type: DataTypes.DATE,
-        allowNull: true
-    },
-    status: {
-        type: DataTypes.ENUM('Pending', 'Processed', 'Failed'),
-        defaultValue: 'Pending'
+        allowNull: true,
+        comment: 'Legacy field - use processed_date instead'
     }
+}, {
+    timestamps: true,
+    underscored: true,
+    indexes: [
+        { fields: ['seller_id'] },
+        { fields: ['status'] },
+        { fields: ['request_date'] },
+        { fields: ['processed_by'] }
+    ]
 });
 
 module.exports = SellerPayout;
