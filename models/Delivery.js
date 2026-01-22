@@ -40,7 +40,7 @@ const Delivery = sequelize.define('deliveries', {
         allowNull: true
     },
     status: {
-        type: DataTypes.ENUM('Pending', 'Assigned', 'In_Transit', 'Delivered', 'Failed'),
+        type: DataTypes.ENUM('Pending', 'Assigned', 'In_Transit', 'Delivered', 'Failed', 'Cancelled'),
         defaultValue: 'Pending'
     },
     otp_code_hash: {
@@ -61,6 +61,41 @@ const Delivery = sequelize.define('deliveries', {
     otp_expires_at: {
         type: DataTypes.DATE,
         allowNull: true
+    },
+    pickup_confirmed_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'When agent confirmed pickup from seller'
+    },
+    delivery_confirmed_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'When delivery was verified and completed'
+    },
+    verification_method: {
+        type: DataTypes.ENUM('qr', 'otp'),
+        allowNull: true,
+        comment: 'How delivery was verified'
+    },
+    distance_km: {
+        type: DataTypes.DECIMAL(6, 2),
+        allowNull: true,
+        comment: 'Calculated delivery distance in km'
+    },
+    estimated_delivery_time: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Estimated time of delivery'
+    },
+    actual_delivery_time: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Actual time of delivery'
+    },
+    delivery_notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Notes from delivery agent'
     }
 });
 

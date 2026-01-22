@@ -23,6 +23,9 @@ const TelegramMapping = require('./TelegramMapping');
 const AdminBankAccount = require('./AdminBankAccount');
 const SellerBankAccount = require('./SellerBankAccount');
 const SellerEarnings = require('./SellerEarnings');
+const AgentEarnings = require('./AgentEarnings');
+const AgentPayout = require('./AgentPayout');
+const DeliverySettings = require('./DeliverySettings');
 
 // Define Associations
 
@@ -63,6 +66,8 @@ Product.hasMany(StockMovement, { foreignKey: 'product_id', as: 'stockMovements' 
 
 // Order Associations
 Order.belongsTo(User, { foreignKey: 'buyer_id', as: 'buyer' });
+Order.belongsTo(User, { foreignKey: 'assigned_agent_id', as: 'assigned_agent' });
+Order.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
 Order.hasMany(OrderItem, { foreignKey: 'order_id', as: 'items' });
 Order.hasOne(Payment, { foreignKey: 'order_id', as: 'payment' });
 Order.hasOne(Delivery, { foreignKey: 'order_id', as: 'delivery' });
@@ -119,6 +124,19 @@ SellerPayout.hasMany(SellerEarnings, { foreignKey: 'payout_id', as: 'earnings' }
 // SellerPayout additional associations
 SellerPayout.belongsTo(User, { foreignKey: 'processed_by', as: 'processor' });
 
+// AgentEarnings Associations
+AgentEarnings.belongsTo(User, { foreignKey: 'agent_id', as: 'agent' });
+AgentEarnings.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+AgentEarnings.belongsTo(Delivery, { foreignKey: 'delivery_id', as: 'delivery' });
+AgentEarnings.belongsTo(AgentPayout, { foreignKey: 'payout_id', as: 'payout' });
+User.hasMany(AgentEarnings, { foreignKey: 'agent_id', as: 'agent_earnings' });
+
+// AgentPayout Associations
+AgentPayout.belongsTo(User, { foreignKey: 'agent_id', as: 'agent' });
+AgentPayout.belongsTo(User, { foreignKey: 'processed_by', as: 'processor' });
+AgentPayout.hasMany(AgentEarnings, { foreignKey: 'payout_id', as: 'earnings' });
+User.hasMany(AgentPayout, { foreignKey: 'agent_id', as: 'agent_payouts' });
+
 // Export all models and sequelize instance
 const db = {
     sequelize,
@@ -143,7 +161,10 @@ const db = {
     TelegramMapping,
     AdminBankAccount,
     SellerBankAccount,
-    SellerEarnings
+    SellerEarnings,
+    AgentEarnings,
+    AgentPayout,
+    DeliverySettings
 };
 
 module.exports = db;

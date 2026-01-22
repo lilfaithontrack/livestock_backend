@@ -82,6 +82,31 @@ const User = sequelize.define('users', {
         type: DataTypes.BIGINT,
         allowNull: true,
         comment: 'Telegram user ID for receiving OTPs'
+    },
+    current_lat: {
+        type: DataTypes.DECIMAL(10, 8),
+        allowNull: true,
+        comment: 'Agent current latitude'
+    },
+    current_lng: {
+        type: DataTypes.DECIMAL(11, 8),
+        allowNull: true,
+        comment: 'Agent current longitude'
+    },
+    is_online: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'Agent availability status'
+    },
+    last_location_update: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Last location update timestamp'
+    },
+    max_delivery_radius_km: {
+        type: DataTypes.DECIMAL(5, 2),
+        defaultValue: 10.00,
+        comment: 'Max delivery radius in km for agents'
     }
 }, {
     hooks: {
