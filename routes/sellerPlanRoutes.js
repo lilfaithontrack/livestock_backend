@@ -3,6 +3,7 @@ const router = express.Router();
 const sellerPlanController = require('../controllers/sellerPlanController');
 const verifyToken = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/roleMiddleware');
+ const upload = require('../middleware/uploadMiddleware');
 
 router.post(
     '/create',
@@ -31,6 +32,14 @@ router.put(
     requireRole(['Seller']),
     sellerPlanController.updatePlanPayment
 );
+
+ router.post(
+     '/:plan_id/payment-proof',
+     verifyToken,
+     requireRole(['Seller']),
+     upload.single('payment_proof'),
+     sellerPlanController.uploadPlanPaymentProof
+ );
 
 router.get(
     '/check-eligibility',

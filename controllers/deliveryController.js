@@ -671,7 +671,7 @@ const confirmPickup = async (req, res, next) => {
 
         // Update delivery status
         await Delivery.update(
-            { 
+            {
                 status: 'In_Transit',
                 pickup_confirmed_at: new Date()
             },
@@ -949,7 +949,6 @@ module.exports = {
     getDeliveryById,
     updateDelivery,
     deleteDelivery,
-    // New endpoints
     approveOrderForDelivery,
     getApprovedOrders,
     assignAgentToOrder,

@@ -94,6 +94,8 @@ QerchaPackage.hasMany(QerchaParticipant, { foreignKey: 'package_id', as: 'partic
 // QerchaParticipant Associations
 QerchaParticipant.belongsTo(QerchaPackage, { foreignKey: 'package_id', as: 'package' });
 QerchaParticipant.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+QerchaParticipant.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+Order.hasMany(QerchaParticipant, { foreignKey: 'order_id', as: 'qercha_participants' });
 
 // Subscription Associations
 Subscription.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });

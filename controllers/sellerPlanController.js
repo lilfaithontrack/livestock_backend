@@ -1,5 +1,6 @@
 const { SellerPlan, User, Product } = require('../models');
 const { Op } = require('sequelize');
+ const { compressImage } = require('../middleware/uploadMiddleware');
 
 // Commission settings (can be updated by admin)
 let COMMISSION_SETTINGS = {
@@ -229,6 +230,50 @@ exports.updatePlanPayment = async (req, res) => {
         res.status(500).json({ error: 'Failed to update payment information' });
     }
 };
+
+ exports.uploadPlanPaymentProof = async (req, res) => {
+     try {
+         const { plan_id } = req.params;
+         const seller_id = req.user.user_id;
+         const payment_reference = req.body?.payment_reference;
+
+         const plan = await SellerPlan.findOne({
+             where: { plan_id, seller_id }
+         });
+
+         if (!plan) {
+             return res.status(404).json({ error: 'Plan not found' });
+         }
+
+         if (plan.payment_status === 'paid') {
+             return res.status(400).json({ error: 'Plan is already paid' });
+         }
+
+         if (!req.file) {
+             return res.status(400).json({ error: 'Payment proof image is required' });
+         }
+
+         const compressedImageUrl = await compressImage(req.file.path, {
+             width: 1200,
+             height: 1200,
+             quality: 85
+         });
+
+         await plan.update({
+             payment_reference: payment_reference || plan.payment_reference,
+             payment_proof_url: compressedImageUrl,
+             payment_status: 'pending'
+         });
+
+         return res.json({
+             message: 'Payment proof uploaded successfully. Awaiting admin verification.',
+             plan
+         });
+     } catch (error) {
+         console.error('Error uploading plan payment proof:', error);
+         res.status(500).json({ error: 'Failed to upload payment proof' });
+     }
+ };
 
 exports.getAllPlans = async (req, res) => {
     try {

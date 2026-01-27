@@ -35,6 +35,21 @@ const QerchaParticipant = sequelize.define('qercha_participants', {
     is_host: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
+    },
+    order_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'orders',
+            key: 'order_id'
+        },
+        comment: 'Order created when joining qercha package'
+    },
+    payment_status: {
+        type: DataTypes.ENUM('Pending', 'Paid', 'Failed', 'Refunded'),
+        defaultValue: 'Pending',
+        allowNull: false,
+        comment: 'Payment status for this qercha participation'
     }
 });
 

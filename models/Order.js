@@ -62,6 +62,12 @@ const Order = sequelize.define('orders', {
         allowNull: true,
         comment: 'Additional shipping notes or instructions'
     },
+    order_type: {
+        type: DataTypes.ENUM('regular', 'qercha'),
+        defaultValue: 'regular',
+        allowNull: false,
+        comment: 'Type of order - regular product purchase or qercha share purchase'
+    },
     delivery_type: {
         type: DataTypes.ENUM('platform', 'seller', 'pickup'),
         defaultValue: 'platform',
