@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const rentalController = require('../controllers/rentalController');
 const { authenticate, authorize } = require('../middleware/auth');
+const upload = require('../middleware/uploadMiddleware');
 
 const isAdmin = authorize('admin');
 
@@ -13,8 +14,8 @@ router.get('/categories', rentalController.getCategories);
 router.get('/', rentalController.getRentals);
 
 // ============ AUTHENTICATED USER ROUTES ============
-// Create a new rental
-router.post('/', authenticate, rentalController.createRental);
+// Create a new rental (with up to 5 images)
+router.post('/', authenticate, upload.array('images', 5), rentalController.createRental);
 
 // Get user's own rentals
 router.get('/my/listings', authenticate, rentalController.getMyRentals);
@@ -25,6 +26,9 @@ router.get('/admin/all', authenticate, isAdmin, rentalController.adminGetRentals
 
 // Get all categories including inactive (admin)
 router.get('/admin/categories', authenticate, isAdmin, rentalController.adminGetCategories);
+
+// Admin create rental (with up to 5 images)
+router.post('/admin/rentals', authenticate, isAdmin, upload.array('images', 5), rentalController.adminCreateRental);
 
 // Create category (admin)
 router.post('/admin/categories', authenticate, isAdmin, rentalController.createCategory);
@@ -44,14 +48,14 @@ router.put('/admin/:id/reject', authenticate, isAdmin, rentalController.rejectRe
 // Toggle featured (admin)
 router.put('/admin/:id/featured', authenticate, isAdmin, rentalController.toggleFeatured);
 
-// Admin update rental
-router.put('/admin/:id', authenticate, isAdmin, rentalController.adminUpdateRental);
+// Admin update rental (with up to 5 images)
+router.put('/admin/:id', authenticate, isAdmin, upload.array('images', 5), rentalController.adminUpdateRental);
 
 // Admin delete rental
 router.delete('/admin/:id', authenticate, isAdmin, rentalController.adminDeleteRental);
 
-// Update own rental
-router.put('/:id', authenticate, rentalController.updateRental);
+// Update own rental (with up to 5 images)
+router.put('/:id', authenticate, upload.array('images', 5), rentalController.updateRental);
 
 // Delete own rental
 router.delete('/:id', authenticate, rentalController.deleteRental);
