@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const rentalController = require('../controllers/rentalController');
-const { authenticate, isAdmin } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
+
+const isAdmin = authorize('admin');
 
 // ============ PUBLIC ROUTES ============
 // Get rental categories
@@ -10,24 +12,12 @@ router.get('/categories', rentalController.getCategories);
 // Get all approved rentals (with filters)
 router.get('/', rentalController.getRentals);
 
-// Get single rental by ID
-router.get('/:id', rentalController.getRentalById);
-
-// Track contact/call button click
-router.post('/:id/contact', rentalController.trackContact);
-
 // ============ AUTHENTICATED USER ROUTES ============
 // Create a new rental
 router.post('/', authenticate, rentalController.createRental);
 
 // Get user's own rentals
 router.get('/my/listings', authenticate, rentalController.getMyRentals);
-
-// Update own rental
-router.put('/:id', authenticate, rentalController.updateRental);
-
-// Delete own rental
-router.delete('/:id', authenticate, rentalController.deleteRental);
 
 // ============ ADMIN ROUTES ============
 // Get all rentals (admin)
@@ -59,5 +49,18 @@ router.put('/admin/:id', authenticate, isAdmin, rentalController.adminUpdateRent
 
 // Admin delete rental
 router.delete('/admin/:id', authenticate, isAdmin, rentalController.adminDeleteRental);
+
+// Update own rental
+router.put('/:id', authenticate, rentalController.updateRental);
+
+// Delete own rental
+router.delete('/:id', authenticate, rentalController.deleteRental);
+
+// ============ ID ROUTES (must be last) ============
+// Get single rental by ID
+router.get('/:id', rentalController.getRentalById);
+
+// Track contact/call button click
+router.post('/:id/contact', rentalController.trackContact);
 
 module.exports = router;
