@@ -26,6 +26,8 @@ const SellerEarnings = require('./SellerEarnings');
 const AgentEarnings = require('./AgentEarnings');
 const AgentPayout = require('./AgentPayout');
 const DeliverySettings = require('./DeliverySettings');
+const RentalCategory = require('./RentalCategory');
+const Rental = require('./Rental');
 
 // Define Associations
 
@@ -139,6 +141,15 @@ AgentPayout.belongsTo(User, { foreignKey: 'processed_by', as: 'processor' });
 AgentPayout.hasMany(AgentEarnings, { foreignKey: 'payout_id', as: 'earnings' });
 User.hasMany(AgentPayout, { foreignKey: 'agent_id', as: 'agent_payouts' });
 
+// RentalCategory Associations
+RentalCategory.hasMany(Rental, { foreignKey: 'category_id', as: 'rentals' });
+
+// Rental Associations
+Rental.belongsTo(User, { foreignKey: 'owner_id', as: 'owner' });
+Rental.belongsTo(RentalCategory, { foreignKey: 'category_id', as: 'category' });
+Rental.belongsTo(User, { foreignKey: 'admin_approved_by', as: 'approver' });
+User.hasMany(Rental, { foreignKey: 'owner_id', as: 'rentals' });
+
 // Export all models and sequelize instance
 const db = {
     sequelize,
@@ -166,7 +177,9 @@ const db = {
     SellerEarnings,
     AgentEarnings,
     AgentPayout,
-    DeliverySettings
+    DeliverySettings,
+    RentalCategory,
+    Rental
 };
 
 module.exports = db;
