@@ -4,7 +4,7 @@ const rentalController = require('../controllers/rentalController');
 const { authenticate, authorize } = require('../middleware/auth');
 const upload = require('../middleware/uploadMiddleware');
 
-const isAdmin = authorize('admin');
+const isAdmin = authorize('Admin');
 
 // ============ PUBLIC ROUTES ============
 // Get rental categories

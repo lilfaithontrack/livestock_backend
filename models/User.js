@@ -107,6 +107,11 @@ const User = sequelize.define('users', {
         type: DataTypes.DECIMAL(5, 2),
         defaultValue: 10.00,
         comment: 'Max delivery radius in km for agents'
+    },
+    push_token: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Expo push token for notifications'
     }
 }, {
     hooks: {

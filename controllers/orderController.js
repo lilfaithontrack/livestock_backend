@@ -371,6 +371,7 @@ const updateOrderStatus = async (req, res, next) => {
                     } else {
                         // If paid and cancelled, add stock back (return)
                         const { addStock } = require('../utils/stockHelpers');
+                        const notificationService = require('../services/notificationService');
                         await addStock(
                             item.product_id,
                             item.quantity,
