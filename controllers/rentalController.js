@@ -36,16 +36,16 @@ exports.getRentals = async (req, res) => {
         };
 
         if (category_id) where.category_id = category_id;
-        if (city) where.city = { [Op.iLike]: `%${city}%` };
+        if (city) where.city = { [Op.like]: `%${city}%` };
         if (min_price) where.price = { ...where.price, [Op.gte]: parseFloat(min_price) };
         if (max_price) where.price = { ...where.price, [Op.lte]: parseFloat(max_price) };
         if (featured === 'true') where.featured = true;
         if (search) {
             where[Op.or] = [
-                { title: { [Op.iLike]: `%${search}%` } },
-                { title_am: { [Op.iLike]: `%${search}%` } },
-                { description: { [Op.iLike]: `%${search}%` } },
-                { location: { [Op.iLike]: `%${search}%` } }
+                { title: { [Op.like]: `%${search}%` } },
+                { title_am: { [Op.like]: `%${search}%` } },
+                { description: { [Op.like]: `%${search}%` } },
+                { location: { [Op.like]: `%${search}%` } }
             ];
         }
 
@@ -362,9 +362,9 @@ exports.adminGetRentals = async (req, res) => {
         if (category_id) where.category_id = category_id;
         if (search) {
             where[Op.or] = [
-                { title: { [Op.iLike]: `%${search}%` } },
-                { contact_phone: { [Op.iLike]: `%${search}%` } },
-                { location: { [Op.iLike]: `%${search}%` } }
+                { title: { [Op.like]: `%${search}%` } },
+                { contact_phone: { [Op.like]: `%${search}%` } },
+                { location: { [Op.like]: `%${search}%` } }
             ];
         }
 
