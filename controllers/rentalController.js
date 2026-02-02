@@ -55,7 +55,7 @@ exports.getRentals = async (req, res) => {
             where,
             include: [
                 { model: RentalCategory, as: 'category', attributes: ['category_id', 'name', 'name_am', 'icon'] },
-                { model: User, as: 'owner', attributes: ['user_id', 'full_name', 'phone'] }
+                { model: User, as: 'owner', attributes: ['user_id', 'email', 'phone'] }
             ],
             order: [['featured', 'DESC'], ['created_at', 'DESC']],
             limit: parseInt(limit),
@@ -86,7 +86,7 @@ exports.getRentalById = async (req, res) => {
         const rental = await Rental.findByPk(id, {
             include: [
                 { model: RentalCategory, as: 'category' },
-                { model: User, as: 'owner', attributes: ['user_id', 'full_name', 'phone'] }
+                { model: User, as: 'owner', attributes: ['user_id', 'email', 'phone'] }
             ]
         });
 
@@ -374,8 +374,8 @@ exports.adminGetRentals = async (req, res) => {
             where,
             include: [
                 { model: RentalCategory, as: 'category' },
-                { model: User, as: 'owner', attributes: ['user_id', 'full_name', 'phone', 'email'] },
-                { model: User, as: 'approver', attributes: ['user_id', 'full_name'] }
+                { model: User, as: 'owner', attributes: ['user_id', 'email', 'phone'] },
+                { model: User, as: 'approver', attributes: ['user_id', 'email'] }
             ],
             order: [['created_at', 'DESC']],
             limit: parseInt(limit),
