@@ -179,11 +179,38 @@ const toggleButcherStatus = async (req, res, next) => {
     }
 };
 
+/**
+ * Get active butchers (Public - for mobile app)
+ * GET /api/v1/butchers/public
+ */
+const getActiveButchers = async (req, res, next) => {
+    try {
+        const { specialization, limit = 10 } = req.query;
+        const where = { is_active: true };
+
+        if (specialization) where.specialization = specialization;
+
+        const butchers = await Butcher.findAll({
+            where,
+            order: [['rating', 'DESC'], ['total_services', 'DESC']],
+            limit: parseInt(limit)
+        });
+
+        return sendSuccess(res, 200, 'Butchers retrieved successfully', {
+            butchers,
+            count: butchers.length
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getAllButchers,
     getButcherById,
     createButcher,
     updateButcher,
     deleteButcher,
-    toggleButcherStatus
+    toggleButcherStatus,
+    getActiveButchers
 };

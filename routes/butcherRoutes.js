@@ -4,7 +4,10 @@ const butcherController = require('../controllers/butcherController');
 const verifyToken = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/roleMiddleware');
 
-// All routes require Admin authentication
+// Public route - Get active butchers for mobile app
+router.get('/public', butcherController.getActiveButchers);
+
+// All routes below require Admin authentication
 
 // Get all butchers (Admin only)
 router.get('/', verifyToken, requireRole(['Admin']), butcherController.getAllButchers);
