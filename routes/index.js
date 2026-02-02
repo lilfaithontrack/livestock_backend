@@ -24,7 +24,6 @@ const withdrawalRoutes = require('./withdrawalRoutes');
 const earningsRoutes = require('./earningsRoutes');
 const paymentAccountRoutes = require('./paymentAccountRoutes');
 const agentEarningsRoutes = require('./agentEarningsRoutes');
-const agentEarningsRoutes = require('./agentEarningsRoutes');
 const rentalRoutes = require('./rentalRoutes');
 const notificationRoutes = require('./notificationRoutes');
 
