@@ -451,7 +451,7 @@ const getApprovedOrders = async (req, res, next) => {
     try {
         const orders = await Order.findAll({
             where: {
-                order_status: 'Approved',
+                order_status: { [Op.in]: ['Approved', 'Paid'] },
                 delivery_type: 'platform',
                 assigned_agent_id: null
             },
@@ -495,8 +495,8 @@ const assignAgentToOrder = async (req, res, next) => {
             return sendError(res, 404, 'Order not found');
         }
 
-        if (order.order_status !== 'Approved') {
-            return sendError(res, 400, 'Order must be approved before assigning agent');
+        if (order.order_status !== 'Approved' && order.order_status !== 'Paid') {
+            return sendError(res, 400, 'Order must be approved or paid before assigning agent');
         }
 
         let selectedAgentId = agent_id;
@@ -532,11 +532,31 @@ const assignAgentToOrder = async (req, res, next) => {
         }
 
         // Update order
-        await order.update({
+        // Update order
+        const updateData = {
             order_status: 'Assigned',
             assigned_agent_id: selectedAgentId,
             delivery_type: 'platform'
-        });
+        };
+
+        // If order was only Paid, generate QR/OTP now (auto-approve)
+        if (order.order_status === 'Paid') {
+            const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
+            const { otp, otpHash, expiresAt } = generateDeliveryOTP();
+
+            Object.assign(updateData, {
+                qr_code: qrCode,
+                qr_code_hash: qrCodeHash,
+                delivery_otp_hash: otpHash,
+                delivery_otp_expires_at: expiresAt,
+                approved_at: new Date(),
+                approved_by: admin_id
+            });
+
+            console.log(`Order ${order.order_id} auto-approved during assignment. OTP: ${otp}`);
+        }
+
+        await order.update(updateData);
 
         // Create delivery record
         const delivery = await Delivery.create({
