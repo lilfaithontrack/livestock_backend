@@ -954,7 +954,7 @@ const getAgentAssignedOrders = async (req, res, next) => {
                 {
                     model: User,
                     as: 'buyer',
-                    attributes: ['user_id', 'email', 'phone', 'address', 'shipping_address']
+                    attributes: ['user_id', 'email', 'phone', 'address']
                 }
             ],
             order: [['approved_at', 'ASC']]
