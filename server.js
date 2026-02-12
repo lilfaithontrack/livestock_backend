@@ -20,7 +20,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:8081', 'http://admin.shegergebeya.com', 'https://admin.shegergebeya.com'],
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:8081', 'http://admin.shegergebeya.com', 'https://admin.shegergebeya.com'],
     credentials: true
 }));
 
