@@ -68,13 +68,10 @@ const createAgent = async (req, res, next) => {
             return sendError(res, 400, 'Agent with this email already exists');
         }
 
-        // Hash password
-        const password_hash = await bcrypt.hash(password, 10);
-
         // Create agent
         const agent = await User.create({
             email,
-            password_hash,
+            password_hash: password, // Let model hook handle hashing
             phone,
             address,
             role: 'Agent',
@@ -119,7 +116,7 @@ const updateAgent = async (req, res, next) => {
 
         // Update password if provided
         if (password) {
-            agent.password_hash = await bcrypt.hash(password, 10);
+            agent.password_hash = password; // Let model hook handle hashing
         }
 
         await agent.save();
