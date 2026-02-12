@@ -451,7 +451,13 @@ const getApprovedOrders = async (req, res, next) => {
     try {
         const orders = await Order.findAll({
             where: {
-                order_status: { [Op.in]: ['Approved', 'Paid'] },
+                [Op.or]: [
+                    { order_status: 'Approved' },
+                    {
+                        payment_status: 'Paid',
+                        order_status: { [Op.notIn]: ['Assigned', 'In_Transit', 'Delivered', 'Cancelled'] }
+                    }
+                ],
                 delivery_type: 'platform',
                 assigned_agent_id: null
             },
@@ -495,7 +501,8 @@ const assignAgentToOrder = async (req, res, next) => {
             return sendError(res, 404, 'Order not found');
         }
 
-        if (order.order_status !== 'Approved' && order.order_status !== 'Paid') {
+        // Allow assignment if status is Approved OR Payment is Paid
+        if (order.order_status !== 'Approved' && order.payment_status !== 'Paid') {
             return sendError(res, 400, 'Order must be approved or paid before assigning agent');
         }
 
@@ -539,8 +546,8 @@ const assignAgentToOrder = async (req, res, next) => {
             delivery_type: 'platform'
         };
 
-        // If order was only Paid, generate QR/OTP now (auto-approve)
-        if (order.order_status === 'Paid') {
+        // If order is not yet Approved (e.g. it's Paid/Placed), auto-approve it now
+        if (order.order_status !== 'Approved') {
             const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
             const { otp, otpHash, expiresAt } = generateDeliveryOTP();
 
