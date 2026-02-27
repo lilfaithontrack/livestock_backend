@@ -18,6 +18,7 @@ router.post(
     requireRole(['Seller']),
     upload.fields([
         { name: 'trade_license', maxCount: 1 },
+        { name: 'tin_vat_document', maxCount: 1 },
         { name: 'national_id_front', maxCount: 1 },
         { name: 'national_id_back', maxCount: 1 }
     ]),
@@ -34,6 +35,7 @@ router.post(
     requireRole(['Buyer']),
     upload.fields([
         { name: 'trade_license', maxCount: 1 },
+        { name: 'tin_vat_document', maxCount: 1 },
         { name: 'national_id_front', maxCount: 1 },
         { name: 'national_id_back', maxCount: 1 }
     ]),

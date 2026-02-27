@@ -43,6 +43,11 @@ const User = sequelize.define('users', {
         allowNull: true,
         comment: 'URL to trade license document'
     },
+    tin_vat_url: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'URL to TIN or VAT certificate'
+    },
     national_id_front_url: {
         type: DataTypes.STRING(500),
         allowNull: true,

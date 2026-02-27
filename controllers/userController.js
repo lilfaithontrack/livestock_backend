@@ -90,6 +90,18 @@ const uploadKYCDocuments = async (req, res, next) => {
             uploadedFiles.trade_license = compressedUrl;
         }
 
+        // Handle TIN/VAT document
+        if (req.files && req.files['tin_vat_document'] && req.files['tin_vat_document'][0]) {
+            const file = req.files['tin_vat_document'][0];
+            const compressedUrl = await compressImage(file.path, {
+                width: 1200,
+                height: 1600,
+                quality: 85
+            });
+            updates.tin_vat_url = compressedUrl;
+            uploadedFiles.tin_vat_document = compressedUrl;
+        }
+
         // Handle national ID front
         if (req.files && req.files['national_id_front'] && req.files['national_id_front'][0]) {
             const file = req.files['national_id_front'][0];
@@ -116,11 +128,12 @@ const uploadKYCDocuments = async (req, res, next) => {
 
         // Check if all required documents are provided
         const hasTradeLicense = updates.trade_license_url || user.trade_license_url;
+        const hasTinVat = updates.tin_vat_url || user.tin_vat_url;
         const hasIdFront = updates.national_id_front_url || user.national_id_front_url;
         const hasIdBack = updates.national_id_back_url || user.national_id_back_url;
 
-        if (!hasTradeLicense || !hasIdFront || !hasIdBack) {
-            return sendError(res, 400, 'All KYC documents are required: trade license, national ID front, and national ID back');
+        if (!hasTradeLicense || !hasTinVat || !hasIdFront || !hasIdBack) {
+            return sendError(res, 400, 'All KYC documents are required: trade license, TIN/VAT document, national ID front, and national ID back');
         }
 
         // Update submission timestamp if this is first submission
@@ -143,6 +156,7 @@ const uploadKYCDocuments = async (req, res, next) => {
             user_id: user.user_id,
             documents: {
                 trade_license: user.trade_license_url,
+                tin_vat_document: user.tin_vat_url,
                 national_id_front: user.national_id_front_url,
                 national_id_back: user.national_id_back_url
             },
@@ -168,6 +182,7 @@ const getKYCDocumentsStatus = async (req, res, next) => {
                 'role',
                 'kyc_status',
                 'trade_license_url',
+                'tin_vat_url',
                 'national_id_front_url',
                 'national_id_back_url',
                 'kyc_submitted_at',
@@ -185,11 +200,13 @@ const getKYCDocumentsStatus = async (req, res, next) => {
             kyc_status: user.kyc_status,
             documents: {
                 trade_license: user.trade_license_url ? true : false,
+                tin_vat_document: user.tin_vat_url ? true : false,
                 national_id_front: user.national_id_front_url ? true : false,
                 national_id_back: user.national_id_back_url ? true : false
             },
             document_urls: {
                 trade_license_url: user.trade_license_url,
+                tin_vat_url: user.tin_vat_url,
                 national_id_front_url: user.national_id_front_url,
                 national_id_back_url: user.national_id_back_url
             },
@@ -223,14 +240,14 @@ const updateKYCStatus = async (req, res, next) => {
 
         // Check if all required documents are present
         if (kyc_status === true) {
-            if (!user.trade_license_url || !user.national_id_front_url || !user.national_id_back_url) {
-                return sendError(res, 400, 'Cannot approve KYC: All documents (trade license, national ID front and back) must be uploaded');
+            if (!user.trade_license_url || !user.tin_vat_url || !user.national_id_front_url || !user.national_id_back_url) {
+                return sendError(res, 400, 'Cannot approve KYC: All documents (trade license, TIN/VAT document, national ID front and back) must be uploaded');
             }
         }
 
         user.kyc_status = kyc_status;
         user.kyc_reviewed_at = new Date();
-        
+
         if (kyc_status === false && rejection_reason) {
             user.kyc_rejection_reason = rejection_reason;
         } else if (kyc_status === true) {
@@ -284,6 +301,18 @@ const becomeSeller = async (req, res, next) => {
             uploadedFiles.trade_license = compressedUrl;
         }
 
+        // Handle TIN/VAT document
+        if (req.files && req.files['tin_vat_document'] && req.files['tin_vat_document'][0]) {
+            const file = req.files['tin_vat_document'][0];
+            const compressedUrl = await compressImage(file.path, {
+                width: 1200,
+                height: 1600,
+                quality: 85
+            });
+            updates.tin_vat_url = compressedUrl;
+            uploadedFiles.tin_vat_document = compressedUrl;
+        }
+
         // Handle national ID front
         if (req.files && req.files['national_id_front'] && req.files['national_id_front'][0]) {
             const file = req.files['national_id_front'][0];
@@ -310,16 +339,17 @@ const becomeSeller = async (req, res, next) => {
 
         // Check if all required documents are provided
         const hasTradeLicense = updates.trade_license_url || user.trade_license_url;
+        const hasTinVat = updates.tin_vat_url || user.tin_vat_url;
         const hasIdFront = updates.national_id_front_url || user.national_id_front_url;
         const hasIdBack = updates.national_id_back_url || user.national_id_back_url;
 
-        if (!hasTradeLicense || !hasIdFront || !hasIdBack) {
-            return sendError(res, 400, 'All documents are required: trade license, national ID/Kebele ID front, and national ID/Kebele ID back');
+        if (!hasTradeLicense || !hasTinVat || !hasIdFront || !hasIdBack) {
+            return sendError(res, 400, 'All documents are required: trade license, TIN/VAT document, national ID/Kebele ID front, and national ID/Kebele ID back');
         }
 
         // Change role to Seller
         updates.role = 'Seller';
-        
+
         // Set KYC status to false (pending admin approval)
         updates.kyc_status = false;
         updates.kyc_submitted_at = new Date();
@@ -335,6 +365,7 @@ const becomeSeller = async (req, res, next) => {
             role: user.role,
             documents: {
                 trade_license: user.trade_license_url,
+                tin_vat_document: user.tin_vat_url,
                 national_id_front: user.national_id_front_url,
                 national_id_back: user.national_id_back_url
             },
