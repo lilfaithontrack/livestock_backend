@@ -188,8 +188,10 @@ const getAllUsers = async (req, res, next) => {
                 'role',
                 'email',
                 'phone',
+                'address', // Re-adding address
                 'kyc_status',
                 'trade_license_url',
+                'tin_vat_url', // Re-adding tin_vat_url
                 'national_id_front_url',
                 'national_id_back_url',
                 'kyc_submitted_at',
