@@ -19,8 +19,28 @@ const { setupBotHandlers } = require('./services/telegramBotHandlers');
 const app = express();
 
 // Middleware
+const allowedProductionOrigins = [
+    'http://admin.shegergebeya.com',
+    'https://admin.shegergebeya.com',
+];
+
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:8081', 'http://admin.shegergebeya.com', 'https://admin.shegergebeya.com'],
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+
+        // Allow any localhost / 127.0.0.1 origin in development
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+            return callback(null, true);
+        }
+
+        // Allow specific production origins
+        if (allowedProductionOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        callback(new Error(`CORS: Origin ${origin} not allowed`));
+    },
     credentials: true
 }));
 

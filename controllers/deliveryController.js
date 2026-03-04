@@ -609,21 +609,40 @@ const sellerSelfDeliver = async (req, res, next) => {
             return sendError(res, 404, 'Order not found or you are not the seller');
         }
 
-        if (order.order_status !== 'Approved') {
-            return sendError(res, 400, 'Order must be approved before self-delivery');
+        if (order.order_status !== 'Approved' && order.order_status !== 'Paid') {
+            return sendError(res, 400, 'Order must be paid or approved before self-delivery');
         }
 
         if (order.assigned_agent_id) {
             return sendError(res, 400, 'Order already has an assigned agent');
         }
 
-        // Update order for seller delivery
-        await order.update({
+        const updateData = {
             order_status: 'Assigned',
             delivery_type: 'seller',
             seller_can_deliver: true,
             assigned_agent_id: seller_id
-        });
+        };
+
+        let generatedOtp = null;
+        if (order.order_status === 'Paid') {
+            const { generateOrderQR, generateDeliveryOTP } = require('../utils/qrGenerator');
+            const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
+            const { otp, otpHash, expiresAt } = generateDeliveryOTP();
+            generatedOtp = otp;
+
+            Object.assign(updateData, {
+                qr_code: qrCode,
+                qr_code_hash: qrCodeHash,
+                delivery_otp_hash: otpHash,
+                delivery_otp_expires_at: expiresAt,
+                approved_at: new Date()
+            });
+            console.log(`Order ${order.order_id} auto-approved for seller delivery. OTP: ${otp}`);
+        }
+
+        // Update order for seller delivery
+        await order.update(updateData);
 
         // Create delivery record with seller as agent
         const delivery = await Delivery.create({
@@ -867,8 +886,8 @@ const resendDeliveryOTP = async (req, res, next) => {
             return sendError(res, 404, 'Order not found');
         }
 
-        if (order.buyer_id !== buyer_id) {
-            return sendError(res, 403, 'You can only request OTP for your own orders');
+        if (order.buyer_id !== req.user.user_id && order.assigned_agent_id !== req.user.user_id) {
+            return sendError(res, 403, 'You can only request OTP for your own orders or deliveries');
         }
 
         if (!['Approved', 'Assigned', 'In_Transit'].includes(order.order_status)) {

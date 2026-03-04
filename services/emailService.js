@@ -15,7 +15,32 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'Ethio Livestock <otp@shegergebeya.
 // Create transporter
 let transporter = null;
 
-const initTransporter = () => {
+const initTransporter = async () => {
+    // If we're in development mode, use Ethereal (fake SMTP for testing without spamming real emails)
+    if (process.env.NODE_ENV === 'development') {
+        try {
+            // Generate test SMTP service account from ethereal.email
+            const testAccount = await nodemailer.createTestAccount();
+
+            transporter = nodemailer.createTransport({
+                host: "smtp.ethereal.email",
+                port: 587,
+                secure: false, // true for 465, false for other ports
+                auth: {
+                    user: testAccount.user, // generated ethereal user
+                    pass: testAccount.pass, // generated ethereal password
+                },
+            });
+
+            console.log('✓ Email service configured for DEVELOPMENT (Local Ethereal SMTP)');
+            return transporter;
+        } catch (err) {
+            console.error('⚠️ Failed to initialize mock Ethereal SMTP:', err);
+            return null;
+        }
+    }
+
+    // Production logic using cPanel settings
     if (!EMAIL_USER || !EMAIL_PASS) {
         console.warn('⚠️ Email not configured. Set EMAIL_USER and EMAIL_PASS in .env');
         return null;
@@ -88,7 +113,7 @@ const sendOTPEmail = async (email, otp, phone) => {
     `;
 
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: EMAIL_FROM,
             to: email,
             subject: `${otp} - Your Ethio Livestock Verification Code`,
@@ -97,6 +122,14 @@ const sendOTPEmail = async (email, otp, phone) => {
         });
 
         console.log(`✓ OTP email sent to ${email}`);
+
+        // Output the test URL if we're using Ethereal in development
+        if (process.env.NODE_ENV === 'development') {
+            console.log('----------------------------------------------------');
+            console.log(`[TEST EMAIL] Preview your OTP email here: ${nodemailer.getTestMessageUrl(info)}`);
+            console.log('----------------------------------------------------');
+        }
+
         return true;
     } catch (error) {
         console.error('Error sending OTP email:', error.message);

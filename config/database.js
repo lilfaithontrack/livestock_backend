@@ -19,7 +19,9 @@ const sequelize = new Sequelize(
     define: {
       timestamps: true,
       underscored: true,
-      freezeTableName: true
+      freezeTableName: true,
+      charset: 'utf8',
+      collate: 'utf8_unicode_ci'
     }
   }
 );
