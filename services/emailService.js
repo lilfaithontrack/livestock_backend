@@ -96,7 +96,7 @@ const sendOTPEmail = async (email, otp, phone) => {
     <body>
         <div class="container">
             <div class="logo">
-                <h1 style="color: #F4320B; margin: 0;">Ethio Livestock</h1>
+                <h1 style="color: #F4320B; margin: 0;">Sheger Gebeya</h1>
             </div>
             <h2 style="text-align: center; color: #333;">Your Verification Code</h2>
             <div class="otp-box">${otp}</div>
@@ -116,7 +116,7 @@ const sendOTPEmail = async (email, otp, phone) => {
         const info = await transporter.sendMail({
             from: EMAIL_FROM,
             to: email,
-            subject: `${otp} - Your Ethio Livestock Verification Code`,
+            subject: `${otp} - Your Sheger Gebeya Verification Code`,
             html: htmlContent,
             text: `Your verification code is: ${otp}. This code expires in 10 minutes. Do not share this code.`
         });
