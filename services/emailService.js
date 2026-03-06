@@ -14,6 +14,7 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'Ethio Livestock <otp@shegergebeya.
 
 // Create transporter
 let transporter = null;
+let transporterVerified = false;
 
 const initTransporter = async () => {
     // If we're in development mode, use Ethereal (fake SMTP for testing without spamming real emails)
@@ -59,7 +60,39 @@ const initTransporter = async () => {
         }
     });
 
-    console.log(`✓ Email service configured (${EMAIL_HOST}:${EMAIL_PORT})`);
+    transporterVerified = false;
+    console.log(`✓ Email service configured (${EMAIL_HOST}:${EMAIL_PORT}, secure=${parseInt(EMAIL_PORT) === 465})`);
+    return transporter;
+};
+
+const ensureTransporterReady = async () => {
+    if (!transporter) {
+        await initTransporter();
+    }
+
+    if (!transporter) {
+        return null;
+    }
+
+    if (!transporterVerified) {
+        try {
+            await transporter.verify();
+            transporterVerified = true;
+            console.log('✓ SMTP connection verified');
+        } catch (err) {
+            console.error('✖ SMTP verify failed:', {
+                message: err?.message,
+                code: err?.code,
+                response: err?.response,
+                command: err?.command,
+                host: EMAIL_HOST,
+                port: EMAIL_PORT,
+                user: EMAIL_USER,
+            });
+            return null;
+        }
+    }
+
     return transporter;
 };
 
@@ -71,11 +104,8 @@ const initTransporter = async () => {
  * @returns {Promise<boolean>}
  */
 const sendOTPEmail = async (email, otp, phone) => {
-    if (!transporter) {
-        initTransporter();
-    }
-
-    if (!transporter) {
+    const readyTransporter = await ensureTransporterReady();
+    if (!readyTransporter) {
         console.error('Email service not available');
         return false;
     }
@@ -113,7 +143,7 @@ const sendOTPEmail = async (email, otp, phone) => {
     `;
 
     try {
-        const info = await transporter.sendMail({
+        const info = await readyTransporter.sendMail({
             from: EMAIL_FROM,
             to: email,
             subject: `${otp} - Your Sheger Gebeya Verification Code`,
@@ -132,7 +162,12 @@ const sendOTPEmail = async (email, otp, phone) => {
 
         return true;
     } catch (error) {
-        console.error('Error sending OTP email:', error.message);
+        console.error('Error sending OTP email:', {
+            message: error?.message,
+            code: error?.code,
+            response: error?.response,
+            command: error?.command,
+        });
         return false;
     }
 };
