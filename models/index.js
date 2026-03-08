@@ -29,6 +29,7 @@ const DeliverySettings = require('./DeliverySettings');
 const RentalCategory = require('./RentalCategory');
 const Rental = require('./Rental');
 const SellerSettings = require('./SellerSettings');
+const SellerDeliveryAgent = require('./SellerDeliveryAgent');
 
 // Define Associations
 
@@ -93,6 +94,12 @@ Delivery.belongsTo(User, { foreignKey: 'seller_assigned_by', as: 'seller_assigne
 // SellerSettings Associations
 SellerSettings.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });
 User.hasOne(SellerSettings, { foreignKey: 'seller_id', as: 'seller_settings' });
+
+// SellerDeliveryAgent Associations
+SellerDeliveryAgent.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });
+User.hasMany(SellerDeliveryAgent, { foreignKey: 'seller_id', as: 'delivery_agents' });
+Delivery.belongsTo(SellerDeliveryAgent, { foreignKey: 'seller_delivery_agent_id', as: 'seller_agent' });
+SellerDeliveryAgent.hasMany(Delivery, { foreignKey: 'seller_delivery_agent_id', as: 'deliveries' });
 
 // QerchaPackage Associations
 QerchaPackage.belongsTo(Product, { foreignKey: 'ox_product_id', as: 'product' });
@@ -186,7 +193,8 @@ const db = {
     DeliverySettings,
     RentalCategory,
     Rental,
-    SellerSettings
+    SellerSettings,
+    SellerDeliveryAgent
 };
 
 module.exports = db;

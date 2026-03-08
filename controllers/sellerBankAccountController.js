@@ -1,5 +1,6 @@
 const { SellerBankAccount } = require('../models');
 const { Op } = require('sequelize');
+const { sendSuccess, sendError } = require('../utils/responseHandler');
 
 // Create seller bank account
 exports.createBankAccount = async (req, res) => {
@@ -14,9 +15,7 @@ exports.createBankAccount = async (req, res) => {
         } = req.body;
 
         if (!bank_name || !account_name || !account_number) {
-            return res.status(400).json({ 
-                error: 'Bank name, account name, and account number are required' 
-            });
+            return sendError(res, 400, 'Bank name, account name, and account number are required');
         }
 
         // If setting as primary, unset other primaries for this seller
@@ -41,13 +40,10 @@ exports.createBankAccount = async (req, res) => {
             is_verified: false
         });
 
-        res.status(201).json({
-            message: 'Bank account added successfully',
-            account
-        });
+        return sendSuccess(res, 201, 'Bank account added successfully', { account });
     } catch (error) {
         console.error('Error creating seller bank account:', error);
-        res.status(500).json({ error: 'Failed to add bank account' });
+        return sendError(res, 500, 'Failed to add bank account');
     }
 };
 
@@ -61,10 +57,10 @@ exports.getMyBankAccounts = async (req, res) => {
             order: [['is_primary', 'DESC'], ['created_at', 'DESC']]
         });
 
-        res.json({ accounts });
+        return sendSuccess(res, 200, 'Bank accounts retrieved successfully', { accounts });
     } catch (error) {
         console.error('Error fetching seller bank accounts:', error);
-        res.status(500).json({ error: 'Failed to fetch bank accounts' });
+        return sendError(res, 500, 'Failed to fetch bank accounts');
     }
 };
 
@@ -79,13 +75,13 @@ exports.getBankAccountById = async (req, res) => {
         });
 
         if (!account) {
-            return res.status(404).json({ error: 'Account not found' });
+            return sendError(res, 404, 'Account not found');
         }
 
-        res.json({ account });
+        return sendSuccess(res, 200, 'Bank account retrieved successfully', { account });
     } catch (error) {
         console.error('Error fetching bank account:', error);
-        res.status(500).json({ error: 'Failed to fetch bank account' });
+        return sendError(res, 500, 'Failed to fetch bank account');
     }
 };
 
@@ -101,7 +97,7 @@ exports.updateBankAccount = async (req, res) => {
         });
 
         if (!account) {
-            return res.status(404).json({ error: 'Account not found' });
+            return sendError(res, 404, 'Account not found');
         }
 
         // Handle primary flag
@@ -117,13 +113,10 @@ exports.updateBankAccount = async (req, res) => {
 
         await account.update(updateData);
 
-        res.json({
-            message: 'Bank account updated successfully',
-            account
-        });
+        return sendSuccess(res, 200, 'Bank account updated successfully', { account });
     } catch (error) {
         console.error('Error updating seller bank account:', error);
-        res.status(500).json({ error: 'Failed to update bank account' });
+        return sendError(res, 500, 'Failed to update bank account');
     }
 };
 
@@ -138,7 +131,7 @@ exports.deleteBankAccount = async (req, res) => {
         });
 
         if (!account) {
-            return res.status(404).json({ error: 'Account not found' });
+            return sendError(res, 404, 'Account not found');
         }
 
         const wasPrimary = account.is_primary;
@@ -155,10 +148,10 @@ exports.deleteBankAccount = async (req, res) => {
             }
         }
 
-        res.json({ message: 'Bank account deleted successfully' });
+        return sendSuccess(res, 200, 'Bank account deleted successfully');
     } catch (error) {
         console.error('Error deleting seller bank account:', error);
-        res.status(500).json({ error: 'Failed to delete bank account' });
+        return sendError(res, 500, 'Failed to delete bank account');
     }
 };
 
@@ -173,7 +166,7 @@ exports.setPrimaryAccount = async (req, res) => {
         });
 
         if (!account) {
-            return res.status(404).json({ error: 'Account not found' });
+            return sendError(res, 404, 'Account not found');
         }
 
         // Unset all other primaries for this seller
@@ -185,13 +178,10 @@ exports.setPrimaryAccount = async (req, res) => {
         // Set this one as primary
         await account.update({ is_primary: true });
 
-        res.json({
-            message: 'Account set as primary successfully',
-            account
-        });
+        return sendSuccess(res, 200, 'Account set as primary successfully', { account });
     } catch (error) {
         console.error('Error setting primary account:', error);
-        res.status(500).json({ error: 'Failed to set primary account' });
+        return sendError(res, 500, 'Failed to set primary account');
     }
 };
 
@@ -204,17 +194,14 @@ exports.verifyBankAccount = async (req, res) => {
         const account = await SellerBankAccount.findByPk(id);
 
         if (!account) {
-            return res.status(404).json({ error: 'Account not found' });
+            return sendError(res, 404, 'Account not found');
         }
 
         await account.update({ is_verified: is_verified !== false });
 
-        res.json({
-            message: `Account ${account.is_verified ? 'verified' : 'unverified'} successfully`,
-            account
-        });
+        return sendSuccess(res, 200, `Account ${account.is_verified ? 'verified' : 'unverified'} successfully`, { account });
     } catch (error) {
         console.error('Error verifying bank account:', error);
-        res.status(500).json({ error: 'Failed to verify bank account' });
+        return sendError(res, 500, 'Failed to verify bank account');
     }
 };

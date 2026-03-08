@@ -97,6 +97,15 @@ const Delivery = sequelize.define('deliveries', {
         allowNull: true,
         comment: 'Notes from delivery agent'
     },
+    seller_delivery_agent_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'seller_delivery_agents',
+            key: 'agent_id'
+        },
+        comment: 'Seller delivery agent assigned to this delivery'
+    },
     seller_assigned_by: {
         type: DataTypes.UUID,
         allowNull: true,

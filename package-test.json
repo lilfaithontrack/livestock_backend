@@ -1,0 +1,17 @@
+{
+  "name": "seller-platform-tests",
+  "version": "1.0.0",
+  "description": "Test scripts for Seller Platform API endpoints",
+  "scripts": {
+    "test:delivery-agents": "node test-seller-delivery-agents.js",
+    "test:earnings-bank": "node test-seller-earnings-bank.js",
+    "test:all": "echo 'Running Delivery Agents Test...' && node test-seller-delivery-agents.js && echo '\\nRunning Earnings & Bank Test...' && node test-seller-earnings-bank.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {},
+  "keywords": ["test", "api", "seller", "delivery", "earnings", "bank"],
+  "author": "Seller Platform Team",
+  "license": "MIT"
+}
