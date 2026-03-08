@@ -11,30 +11,28 @@ CREATE TABLE IF NOT EXISTS seller_settings (
     seller_id CHAR(36) NOT NULL UNIQUE,
     
     -- Delivery Preferences
-    can_self_deliver BOOLEAN DEFAULT TRUE COMMENT 'Seller can deliver their own orders',
-    auto_accept_delivery BOOLEAN DEFAULT FALSE COMMENT 'Automatically accept delivery assignments',
+    can_self_deliver TINYINT(1) DEFAULT 1 COMMENT 'Seller can deliver their own orders',
+    auto_accept_delivery TINYINT(1) DEFAULT 0 COMMENT 'Automatically accept delivery assignments',
     preferred_delivery_radius_km DECIMAL(6,2) DEFAULT 10.00 COMMENT 'Maximum delivery radius in km',
     delivery_fee_percentage DECIMAL(5,2) DEFAULT 0.00 COMMENT 'Additional delivery fee percentage',
     
     -- Notification Preferences
-    notify_new_orders BOOLEAN DEFAULT TRUE,
-    notify_delivery_assigned BOOLEAN DEFAULT TRUE,
-    notify_delivery_completed BOOLEAN DEFAULT TRUE,
+    notify_new_orders TINYINT(1) DEFAULT 1,
+    notify_delivery_assigned TINYINT(1) DEFAULT 1,
+    notify_delivery_completed TINYINT(1) DEFAULT 1,
     
     -- Business Hours and Agent Management
-    business_hours JSON COMMENT 'Operating hours for deliveries',
-    preferred_agents JSON COMMENT 'List of preferred delivery agent IDs',
-    blocked_agents JSON COMMENT 'List of blocked agent IDs',
+    business_hours TEXT COMMENT 'Operating hours for deliveries (JSON format)',
+    preferred_agents TEXT COMMENT 'List of preferred delivery agent IDs (JSON format)',
+    blocked_agents TEXT COMMENT 'List of blocked agent IDs (JSON format)',
     
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    -- Foreign Keys
-    FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    
     -- Indexes
-    INDEX idx_seller_id (seller_id)
+    INDEX idx_seller_id (seller_id),
+    KEY seller_id (seller_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
@@ -61,11 +59,6 @@ ADD COLUMN IF NOT EXISTS actual_pickup_time DATETIME COMMENT 'Actual pickup time
 ALTER TABLE deliveries 
 ADD COLUMN IF NOT EXISTS delivery_rating INT CHECK (delivery_rating BETWEEN 1 AND 5) COMMENT 'Delivery rating 1-5',
 ADD COLUMN IF NOT EXISTS delivery_feedback TEXT COMMENT 'Feedback about delivery';
-
--- Add foreign key for seller_assigned_by
-ALTER TABLE deliveries 
-ADD CONSTRAINT fk_deliveries_seller_assigned_by 
-FOREIGN KEY (seller_assigned_by) REFERENCES users(user_id) ON DELETE SET NULL;
 
 -- Add indexes for better query performance
 ALTER TABLE deliveries 
