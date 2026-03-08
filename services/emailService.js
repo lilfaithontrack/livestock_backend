@@ -17,33 +17,11 @@ let transporter = null;
 let transporterVerified = false;
 
 const initTransporter = async () => {
-    // If we're in development mode, use Ethereal (fake SMTP for testing without spamming real emails)
-    if (process.env.NODE_ENV === 'development') {
-        try {
-            // Generate test SMTP service account from ethereal.email
-            const testAccount = await nodemailer.createTestAccount();
-
-            transporter = nodemailer.createTransport({
-                host: "smtp.ethereal.email",
-                port: 587,
-                secure: false, // true for 465, false for other ports
-                auth: {
-                    user: testAccount.user, // generated ethereal user
-                    pass: testAccount.pass, // generated ethereal password
-                },
-            });
-
-            console.log('✓ Email service configured for DEVELOPMENT (Local Ethereal SMTP)');
-            return transporter;
-        } catch (err) {
-            console.error('⚠️ Failed to initialize mock Ethereal SMTP:', err);
-            return null;
-        }
-    }
-
     // Production logic using cPanel settings
     if (!EMAIL_USER || !EMAIL_PASS) {
         console.warn('⚠️ Email not configured. Set EMAIL_USER and EMAIL_PASS in .env');
+        console.warn('⚠️ Current EMAIL_USER:', EMAIL_USER || 'NOT SET');
+        console.warn('⚠️ Current EMAIL_PASS:', EMAIL_PASS ? '***SET***' : 'NOT SET');
         return null;
     }
 
@@ -57,11 +35,14 @@ const initTransporter = async () => {
         },
         tls: {
             rejectUnauthorized: false // Allows self-signed certs (common on cPanel)
-        }
+        },
+        debug: true,
+        logger: true
     });
 
     transporterVerified = false;
     console.log(`✓ Email service configured (${EMAIL_HOST}:${EMAIL_PORT}, secure=${parseInt(EMAIL_PORT) === 465})`);
+    console.log(`✓ Email user: ${EMAIL_USER}`);
     return transporter;
 };
 
@@ -143,6 +124,10 @@ const sendOTPEmail = async (email, otp, phone) => {
     `;
 
     try {
+        console.log(`📧 Attempting to send OTP email to ${email}...`);
+        console.log(`📧 From: ${EMAIL_FROM}`);
+        console.log(`📧 SMTP: ${EMAIL_HOST}:${EMAIL_PORT}`);
+        
         const info = await readyTransporter.sendMail({
             from: EMAIL_FROM,
             to: email,
@@ -151,22 +136,22 @@ const sendOTPEmail = async (email, otp, phone) => {
             text: `Your verification code is: ${otp}. This code expires in 10 minutes. Do not share this code.`
         });
 
-        console.log(`✓ OTP email sent to ${email}`);
-
-        // Output the test URL if we're using Ethereal in development
-        if (process.env.NODE_ENV === 'development') {
-            console.log('----------------------------------------------------');
-            console.log(`[TEST EMAIL] Preview your OTP email here: ${nodemailer.getTestMessageUrl(info)}`);
-            console.log('----------------------------------------------------');
-        }
+        console.log(`✓ OTP email sent successfully to ${email}`);
+        console.log(`✓ Message ID: ${info.messageId}`);
+        console.log(`✓ Accepted: ${info.accepted}`);
+        console.log(`✓ Rejected: ${info.rejected}`);
 
         return true;
     } catch (error) {
-        console.error('Error sending OTP email:', {
+        console.error('✖ Error sending OTP email:', {
+            to: email,
             message: error?.message,
             code: error?.code,
             response: error?.response,
             command: error?.command,
+            host: EMAIL_HOST,
+            port: EMAIL_PORT,
+            user: EMAIL_USER,
         });
         return false;
     }

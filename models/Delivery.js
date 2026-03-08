@@ -96,6 +96,52 @@ const Delivery = sequelize.define('deliveries', {
         type: DataTypes.TEXT,
         allowNull: true,
         comment: 'Notes from delivery agent'
+    },
+    seller_assigned_by: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'users',
+            key: 'user_id'
+        },
+        comment: 'Seller who assigned this delivery'
+    },
+    assignment_type: {
+        type: DataTypes.ENUM('admin', 'seller', 'auto'),
+        defaultValue: 'admin',
+        comment: 'Who assigned the delivery'
+    },
+    seller_notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Notes from seller about delivery'
+    },
+    pickup_location: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: 'Seller location for pickup {lat, lng, address}'
+    },
+    delivery_location: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: 'Buyer location for delivery {lat, lng, address}'
+    },
+    estimated_pickup_time: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    actual_pickup_time: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    delivery_rating: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 1, max: 5 }
+    },
+    delivery_feedback: {
+        type: DataTypes.TEXT,
+        allowNull: true
     }
 });
 
