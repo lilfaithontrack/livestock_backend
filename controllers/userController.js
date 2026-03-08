@@ -289,11 +289,6 @@ const becomeSeller = async (req, res, next) => {
         const updates = {};
         const uploadedFiles = {};
 
-        // Handle business dates from request body
-        const { business_start_date, trade_license_expiry_date } = req.body;
-        if (business_start_date) updates.business_start_date = business_start_date;
-        if (trade_license_expiry_date) updates.trade_license_expiry_date = trade_license_expiry_date;
-
         // Handle trade license
         if (req.files && req.files['trade_license'] && req.files['trade_license'][0]) {
             const file = req.files['trade_license'][0];
@@ -374,8 +369,6 @@ const becomeSeller = async (req, res, next) => {
                 national_id_front: user.national_id_front_url,
                 national_id_back: user.national_id_back_url
             },
-            business_start_date: user.business_start_date,
-            trade_license_expiry_date: user.trade_license_expiry_date,
             kyc_status: user.kyc_status,
             kyc_submitted_at: user.kyc_submitted_at,
             message: 'Your seller application has been submitted. Please wait for admin verification.'

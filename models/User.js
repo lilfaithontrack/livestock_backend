@@ -58,16 +58,6 @@ const User = sequelize.define('users', {
         allowNull: true,
         comment: 'URL to national ID or Kebele ID back side'
     },
-    business_start_date: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-        comment: 'Business registration / establishment date'
-    },
-    trade_license_expiry_date: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-        comment: 'Trade license expiry / end date'
-    },
     kyc_submitted_at: {
         type: DataTypes.DATE,
         allowNull: true,
