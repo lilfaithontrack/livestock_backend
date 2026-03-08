@@ -28,11 +28,11 @@ router.post(
 // Get KYC documents status (Seller only)
 router.get('/kyc/documents', verifyToken, requireRole(['Seller']), userController.getKYCDocumentsStatus);
 
-// Become a Seller - Change role and upload KYC documents (Buyer only)
+// Become a Seller - Change role and upload KYC documents (Buyer or Seller for resubmission)
 router.post(
     '/become-seller',
     verifyToken,
-    requireRole(['Buyer']),
+    requireRole(['Buyer', 'Seller']),
     upload.fields([
         { name: 'trade_license', maxCount: 1 },
         { name: 'tin_vat_document', maxCount: 1 },

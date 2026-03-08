@@ -41,29 +41,43 @@ CREATE TABLE IF NOT EXISTS seller_settings (
 
 -- Seller assignment tracking
 ALTER TABLE deliveries 
-ADD COLUMN IF NOT EXISTS seller_assigned_by CHAR(36) COMMENT 'Seller who assigned this delivery',
+ADD COLUMN IF NOT EXISTS seller_assigned_by CHAR(36) COMMENT 'Seller who assigned this delivery';
+
+ALTER TABLE deliveries 
 ADD COLUMN IF NOT EXISTS assignment_type ENUM('admin', 'seller', 'auto') DEFAULT 'admin' COMMENT 'Who assigned the delivery';
 
 -- Delivery details
 ALTER TABLE deliveries 
-ADD COLUMN IF NOT EXISTS seller_notes TEXT COMMENT 'Notes from seller about delivery',
-ADD COLUMN IF NOT EXISTS pickup_location JSON COMMENT 'Seller location for pickup {lat, lng, address}',
+ADD COLUMN IF NOT EXISTS seller_notes TEXT COMMENT 'Notes from seller about delivery';
+
+ALTER TABLE deliveries 
+ADD COLUMN IF NOT EXISTS pickup_location JSON COMMENT 'Seller location for pickup {lat, lng, address}';
+
+ALTER TABLE deliveries 
 ADD COLUMN IF NOT EXISTS delivery_location JSON COMMENT 'Buyer location for delivery {lat, lng, address}';
 
 -- Timing
 ALTER TABLE deliveries 
-ADD COLUMN IF NOT EXISTS estimated_pickup_time DATETIME COMMENT 'Estimated pickup time',
+ADD COLUMN IF NOT EXISTS estimated_pickup_time DATETIME COMMENT 'Estimated pickup time';
+
+ALTER TABLE deliveries 
 ADD COLUMN IF NOT EXISTS actual_pickup_time DATETIME COMMENT 'Actual pickup time';
 
 -- Feedback
 ALTER TABLE deliveries 
-ADD COLUMN IF NOT EXISTS delivery_rating INT CHECK (delivery_rating BETWEEN 1 AND 5) COMMENT 'Delivery rating 1-5',
+ADD COLUMN IF NOT EXISTS delivery_rating INT COMMENT 'Delivery rating 1-5';
+
+ALTER TABLE deliveries 
 ADD COLUMN IF NOT EXISTS delivery_feedback TEXT COMMENT 'Feedback about delivery';
 
 -- Add indexes for better query performance
 ALTER TABLE deliveries 
-ADD INDEX IF NOT EXISTS idx_seller_assigned_by (seller_assigned_by),
-ADD INDEX IF NOT EXISTS idx_assignment_type (assignment_type),
+ADD INDEX IF NOT EXISTS idx_seller_assigned_by (seller_assigned_by);
+
+ALTER TABLE deliveries 
+ADD INDEX IF NOT EXISTS idx_assignment_type (assignment_type);
+
+ALTER TABLE deliveries 
 ADD INDEX IF NOT EXISTS idx_delivery_status (status);
 
 -- ============================================

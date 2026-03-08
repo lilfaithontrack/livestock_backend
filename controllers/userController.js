@@ -276,9 +276,9 @@ const becomeSeller = async (req, res, next) => {
         const user_id = req.user.user_id;
         const user_role = req.user.role;
 
-        // Only buyers can become sellers
-        if (user_role !== 'Buyer') {
-            return sendError(res, 403, 'Only buyers can become sellers');
+        // Allow Buyers to become Sellers and Sellers to resubmit KYC documents
+        if (user_role !== 'Buyer' && user_role !== 'Seller') {
+            return sendError(res, 403, 'Only buyers can become sellers or sellers can resubmit KYC documents');
         }
 
         const user = await User.findByPk(user_id);
