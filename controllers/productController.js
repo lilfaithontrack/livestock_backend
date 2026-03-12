@@ -203,6 +203,7 @@ const getProducts = async (req, res, next) => {
             health_status,
             featured,
             availability_status,
+            location,
             sort = 'created_at',
             order = 'DESC'
         } = req.query;
@@ -213,7 +214,11 @@ const getProducts = async (req, res, next) => {
         const where = { status: 'Live' };
 
         if (search) {
-            where.name = { [require('sequelize').Op.like]: `%${search}%` };
+            where[require('sequelize').Op.or] = [
+                { name: { [require('sequelize').Op.like]: `%${search}%` } },
+                { '$subcategory.name$': { [require('sequelize').Op.like]: `%${search}%` } },
+                { '$subcategory.category.name$': { [require('sequelize').Op.like]: `%${search}%` } }
+            ];
         }
 
         if (subcategory) {
@@ -222,6 +227,8 @@ const getProducts = async (req, res, next) => {
 
         if (product_type) {
             where.product_type = product_type;
+        } else {
+            where.product_type = { [require('sequelize').Op.ne]: 'qercha' };
         }
 
         if (min_price || max_price) {
@@ -251,6 +258,8 @@ const getProducts = async (req, res, next) => {
         } else {
             where.availability_status = 'available'; // Default to available products
         }
+
+
 
         const products = await Product.findAndCountAll({
             where,

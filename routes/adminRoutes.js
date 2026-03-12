@@ -3,6 +3,7 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const productController = require('../controllers/productController');
 const productTypeController = require('../controllers/productTypeController');
+const sellerBankAccountController = require('../controllers/sellerBankAccountController');
 const verifyToken = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/roleMiddleware');
 const upload = require('../middleware/uploadMiddleware');
@@ -60,6 +61,9 @@ router.put('/product-types/:id/categories', productTypeController.assignCategori
 
 // Remove category from product type
 router.delete('/product-types/:id/categories/:catId', productTypeController.removeCategoryFromType);
+
+// Admin verify seller bank account
+router.put('/seller-bank-accounts/:id/verify', sellerBankAccountController.verifyBankAccount);
 
 // Get all orders (admin view)
 router.get('/orders', adminController.getAllOrders);

@@ -1,4 +1,4 @@
-const { Product, User, Order, Delivery, ProductSubcategory, ProductCategory } = require('../models');
+const { Product, User, Order, Delivery, ProductSubcategory, ProductCategory, SellerBankAccount } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { formatProductResponse } = require('../utils/productHelpers');
 const { Op } = require('sequelize');
@@ -198,6 +198,13 @@ const getAllUsers = async (req, res, next) => {
                 'kyc_reviewed_at',
                 'kyc_rejection_reason',
                 'created_at'
+            ],
+            include: [
+                {
+                    model: SellerBankAccount,
+                    as: 'bank_accounts',
+                    attributes: ['account_id', 'bank_name', 'account_name', 'account_number', 'is_primary', 'is_verified', 'created_at']
+                }
             ],
             order: [['created_at', 'DESC']]
         });

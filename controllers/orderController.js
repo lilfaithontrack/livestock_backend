@@ -350,6 +350,40 @@ const updateOrderStatus = async (req, res, next) => {
                 p.payment_status = 'Paid';
                 await p.save({ transaction });
             }
+
+            // 3. Create Seller Earnings
+            const earningsController = require('./earningsController');
+            const sellerTotals = {};
+
+            // A) standard order items
+            if (order.items && order.items.length > 0) {
+                for (const item of order.items) {
+                    if (item.seller_id) {
+                        const itemTotal = parseFloat(item.unit_price) * parseInt(item.quantity);
+                        sellerTotals[item.seller_id] = (sellerTotals[item.seller_id] || 0) + itemTotal;
+                    }
+                }
+            }
+
+            // B) Qercha participants
+            if (participants && participants.length > 0) {
+                for (const p of participants) {
+                    const pkg = await QerchaPackage.findByPk(p.package_id, { transaction });
+                    if (pkg && pkg.host_user_id) {
+                        const amount = parseFloat(p.amount_paid);
+                        sellerTotals[pkg.host_user_id] = (sellerTotals[pkg.host_user_id] || 0) + amount;
+                    }
+                }
+            }
+
+            // Generate earnings records
+            for (const sellerId in sellerTotals) {
+                try {
+                    await earningsController.createEarning(order.order_id, sellerId, sellerTotals[sellerId], transaction);
+                } catch (err) {
+                    console.error('Failed to create earning for seller:', sellerId, err);
+                }
+            }
         }
 
         // Handle order cancellation

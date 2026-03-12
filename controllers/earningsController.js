@@ -114,15 +114,16 @@ exports.getEarningsHistory = async (req, res) => {
 };
 
 // Create earning record (called when order is completed)
-exports.createEarning = async (order_id, seller_id, order_amount) => {
+exports.createEarning = async (order_id, seller_id, order_amount, transaction = null) => {
     try {
         // Get seller's current plan
         const sellerPlan = await SellerPlan.findOne({
-            where: { 
-                seller_id, 
+            where: {
+                seller_id,
                 is_active: true,
                 payment_status: 'paid'
-            }
+            },
+            transaction
         });
 
         // Only create earnings for commission plans
@@ -147,7 +148,7 @@ exports.createEarning = async (order_id, seller_id, order_amount) => {
             net_amount: netAmount,
             status: 'pending',
             available_date: availableDate
-        });
+        }, { transaction });
 
         return earning;
     } catch (error) {
@@ -242,8 +243,8 @@ exports.getSellerDashboard = async (req, res) => {
 
         // Get current plan
         const currentPlan = await SellerPlan.findOne({
-            where: { 
-                seller_id, 
+            where: {
+                seller_id,
                 is_active: true,
                 payment_status: 'paid'
             }
@@ -258,7 +259,7 @@ exports.getSellerDashboard = async (req, res) => {
 
         // Get product count
         const productCount = await Product.count({
-            where: { 
+            where: {
                 seller_id,
                 status: { [Op.in]: ['Pending', 'Live'] }
             }
