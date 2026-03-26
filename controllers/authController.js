@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, SellerDeliveryAgent } = require('../models');
 const jwtConfig = require('../config/jwt');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { generateOTP, hashOTP, verifyOTP, getOTPExpiration } = require('../utils/otpGenerator');
@@ -281,11 +281,137 @@ const adminLogin = async (req, res, next) => {
     }
 };
 
+/**
+ * Request OTP for delivery agent login (via email)
+ * POST /api/v1/auth/agent/request-otp
+ */
+const requestDeliveryAgentOTP = async (req, res, next) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return sendError(res, 400, 'Email is required');
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return sendError(res, 400, 'Invalid email format');
+        }
+
+        const normalizedEmail = email.toLowerCase().trim();
+
+        const agent = await SellerDeliveryAgent.findOne({
+            where: { email: normalizedEmail, is_active: true }
+        });
+
+        if (!agent) {
+            return sendError(res, 404, 'No active delivery agent account found with this email');
+        }
+
+        const otp = generateOTP();
+        const otpHash = await hashOTP(otp);
+        const expiresAt = getOTPExpiration();
+
+        otpStore.set(`agent:${normalizedEmail}`, { otpHash, expiresAt });
+
+        let otpSent = false;
+        try {
+            otpSent = await sendOTPEmail(normalizedEmail, otp, agent.full_name);
+        } catch (error) {
+            console.error('Error sending agent OTP email:', error.message);
+        }
+
+        const returnOTP = !otpSent || process.env.NODE_ENV === 'development';
+
+        return sendSuccess(res, 200,
+            otpSent ? 'OTP sent to your email' : 'OTP generated',
+            {
+                message: otpSent
+                    ? 'Please check your email for the OTP code'
+                    : 'Enter the OTP code to continue',
+                otp: returnOTP ? otp : undefined,
+                email_sent: otpSent,
+                agent_name: agent.full_name
+            }
+        );
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Verify OTP for delivery agent login
+ * POST /api/v1/auth/agent/verify-otp
+ */
+const verifyDeliveryAgentOTP = async (req, res, next) => {
+    try {
+        const { email, otp } = req.body;
+
+        if (!email || !otp) {
+            return sendError(res, 400, 'Email and OTP are required');
+        }
+
+        const normalizedEmail = email.toLowerCase().trim();
+        const otpData = otpStore.get(`agent:${normalizedEmail}`);
+
+        if (!otpData) {
+            return sendError(res, 400, 'OTP not found or expired. Please request a new one.');
+        }
+
+        if (new Date() > new Date(otpData.expiresAt)) {
+            otpStore.delete(`agent:${normalizedEmail}`);
+            return sendError(res, 400, 'OTP expired. Please request a new one.');
+        }
+
+        const isValid = await verifyOTP(String(otp).trim(), otpData.otpHash);
+        if (!isValid) {
+            return sendError(res, 401, 'Invalid OTP');
+        }
+
+        otpStore.delete(`agent:${normalizedEmail}`);
+
+        const agent = await SellerDeliveryAgent.findOne({
+            where: { email: normalizedEmail, is_active: true }
+        });
+
+        if (!agent) {
+            return sendError(res, 404, 'Delivery agent not found or deactivated');
+        }
+
+        const token = jwt.sign(
+            {
+                agent_id: agent.agent_id,
+                role: 'Agent',
+                email: agent.email
+            },
+            jwtConfig.secret,
+            { expiresIn: jwtConfig.expiresIn }
+        );
+
+        return sendSuccess(res, 200, 'Login successful', {
+            token,
+            agent: {
+                agent_id: agent.agent_id,
+                full_name: agent.full_name,
+                email: agent.email,
+                phone: agent.phone,
+                vehicle_type: agent.vehicle_type,
+                is_available: agent.is_available,
+                role: 'Agent'
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     register,
     loginWithEmailOTP,
     verifyEmailOTP,
     loginWithEmail,
     adminLogin,
+    requestDeliveryAgentOTP,
+    verifyDeliveryAgentOTP,
     otpStore
 };

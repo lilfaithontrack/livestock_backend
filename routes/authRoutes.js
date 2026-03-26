@@ -17,4 +17,8 @@ router.post('/login/email', authController.loginWithEmail);
 // Admin login
 router.post('/admin/login', authController.adminLogin);
 
+// Delivery agent OTP login (seller-created agents login via email OTP)
+router.post('/agent/request-otp', authController.requestDeliveryAgentOTP);
+router.post('/agent/verify-otp', authController.verifyDeliveryAgentOTP);
+
 module.exports = router;
