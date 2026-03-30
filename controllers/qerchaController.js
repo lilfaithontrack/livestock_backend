@@ -8,7 +8,7 @@ const sequelize = require('../config/database');
  */
 const createPackage = async (req, res, next) => {
     try {
-        const { ox_product_id, total_shares, start_date, expiry_date } = req.body;
+        const { ox_product_id, total_shares, start_date, expiry_date, category } = req.body;
         const host_user_id = req.user.user_id;
 
         if (!ox_product_id || !total_shares || total_shares < 2) {
@@ -32,7 +32,8 @@ const createPackage = async (req, res, next) => {
             host_user_id,
             status: 'Active',
             start_date: start_date || null,
-            expiry_date: expiry_date || null
+            expiry_date: expiry_date || null,
+            category: category || null
         });
 
         return sendSuccess(res, 201, 'Qercha package created successfully', {
@@ -246,8 +247,12 @@ const joinPackage = async (req, res, next) => {
  */
 const getPackages = async (req, res, next) => {
     try {
+        const { category } = req.query;
+        const where = { status: 'Active' };
+        if (category) where.category = category;
+
         const packages = await QerchaPackage.findAll({
-            where: { status: 'Active' },
+            where,
             include: [
                 {
                     model: Product,

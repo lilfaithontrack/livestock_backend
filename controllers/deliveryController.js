@@ -1,4 +1,4 @@
-const { Delivery, Order, User, OrderItem, Product } = require('../models');
+const { Delivery, Order, User, OrderItem, Product, SellerEarnings } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { generateOTP, hashOTP, verifyOTP, getOTPExpiration } = require('../utils/otpGenerator');
 const { generateOrderQR, verifyQRCode, generateDeliveryOTP, verifyDeliveryOTP } = require('../utils/qrGenerator');
@@ -183,7 +183,15 @@ const verifyHandover = async (req, res, next) => {
         order.order_status = 'Delivered';
         await order.save();
 
-        // TODO: Trigger seller payout calculation logic
+        // Make seller earnings available immediately on delivery
+        try {
+            await SellerEarnings.update(
+                { status: 'available', available_date: new Date() },
+                { where: { order_id: order.order_id, status: 'pending' } }
+            );
+        } catch (earningErr) {
+            console.error('Error updating seller earnings on delivery:', earningErr);
+        }
 
         return sendSuccess(res, 200, 'Delivery confirmed successfully', {
             delivery_id: delivery.delivery_id,
@@ -788,6 +796,16 @@ const verifyDelivery = async (req, res, next) => {
             order_status: 'Delivered',
             delivered_at: new Date()
         });
+
+        // Make seller earnings available immediately on delivery
+        try {
+            await SellerEarnings.update(
+                { status: 'available', available_date: new Date() },
+                { where: { order_id: id, status: 'pending' } }
+            );
+        } catch (earningErr) {
+            console.error('Error updating seller earnings on delivery:', earningErr);
+        }
 
         // Update delivery record
         const delivery = await Delivery.findOne({ where: { order_id: id, agent_id } });

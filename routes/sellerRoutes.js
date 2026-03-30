@@ -99,8 +99,11 @@ router.get('/delivery-agents/:id', verifyToken, requireRole(['Seller']), sellerD
 // Update delivery agent
 router.put('/delivery-agents/:id', verifyToken, requireRole(['Seller']), sellerDeliveryAgentController.updateAgent);
 
-// Deactivate delivery agent
+// Deactivate delivery agent (soft)
 router.delete('/delivery-agents/:id', verifyToken, requireRole(['Seller']), sellerDeliveryAgentController.deactivateAgent);
+
+// Permanently delete delivery agent
+router.delete('/delivery-agents/:id/delete', verifyToken, requireRole(['Seller']), sellerDeliveryAgentController.deleteAgent);
 
 // Toggle agent availability
 router.put('/delivery-agents/:id/availability', verifyToken, requireRole(['Seller']), sellerDeliveryAgentController.toggleAvailability);

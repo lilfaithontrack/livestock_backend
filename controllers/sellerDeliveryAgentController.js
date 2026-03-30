@@ -151,7 +151,7 @@ const updateAgent = async (req, res, next) => {
 };
 
 /**
- * Deactivate delivery agent
+ * Deactivate delivery agent (soft delete)
  * DELETE /api/v1/seller/delivery-agents/:id
  */
 const deactivateAgent = async (req, res, next) => {
@@ -172,6 +172,32 @@ const deactivateAgent = async (req, res, next) => {
         return sendSuccess(res, 200, 'Delivery agent deactivated successfully');
     } catch (error) {
         console.error('Error deactivating delivery agent:', error);
+        next(error);
+    }
+};
+
+/**
+ * Permanently delete delivery agent
+ * DELETE /api/v1/seller/delivery-agents/:id/delete
+ */
+const deleteAgent = async (req, res, next) => {
+    try {
+        const seller_id = req.user.user_id;
+        const { id } = req.params;
+
+        const agent = await SellerDeliveryAgent.findOne({
+            where: { agent_id: id, seller_id }
+        });
+
+        if (!agent) {
+            return sendError(res, 404, 'Delivery agent not found');
+        }
+
+        await agent.destroy();
+
+        return sendSuccess(res, 200, 'Delivery agent deleted permanently');
+    } catch (error) {
+        console.error('Error deleting delivery agent:', error);
         next(error);
     }
 };
@@ -228,10 +254,6 @@ const assignAgentToOrder = async (req, res, next) => {
 
         if (!agent) {
             return sendError(res, 404, 'Delivery agent not found or inactive');
-        }
-
-        if (!agent.is_available) {
-            return sendError(res, 400, 'This delivery agent is currently unavailable');
         }
 
         // Verify order belongs to seller
@@ -291,9 +313,6 @@ const assignAgentToOrder = async (req, res, next) => {
 
         // Update order status
         await order.update({ order_status: 'Assigned' });
-
-        // Mark agent as unavailable during delivery
-        await agent.update({ is_available: false });
 
         return sendSuccess(res, 200, 'Delivery agent assigned successfully', {
             delivery,
@@ -408,6 +427,7 @@ module.exports = {
     getAgentById,
     updateAgent,
     deactivateAgent,
+    deleteAgent,
     toggleAvailability,
     assignAgentToOrder,
     getDeliveryTracking,

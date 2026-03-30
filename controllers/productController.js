@@ -259,6 +259,10 @@ const getProducts = async (req, res, next) => {
             where.availability_status = 'available'; // Default to available products
         }
 
+        if (location) {
+            where.location = { [require('sequelize').Op.like]: `%${location}%` };
+        }
+
 
 
         const products = await Product.findAndCountAll({

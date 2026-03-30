@@ -46,6 +46,11 @@ const QerchaPackage = sequelize.define('qercha_packages', {
         type: DataTypes.DATE,
         allowNull: true,
         comment: 'When the package expires if not completed'
+    },
+    category: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Qercha-specific category (e.g. Cattle, Sheep, Goat, Camel)'
     }
 });
 
