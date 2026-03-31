@@ -18,6 +18,13 @@ const { setupBotHandlers } = require('./services/telegramBotHandlers');
 // Initialize Express app
 const app = express();
 
+// Readiness gate: block requests until DB is ready
+let appReady = false;
+app.use((req, res, next) => {
+    if (appReady || req.path === '/' || req.path === '/health') return next();
+    res.status(503).json({ success: false, message: 'Server is starting up, please retry in a moment' });
+});
+
 // Middleware
 const allowedProductionOrigins = [
     'http://admin.shegergebeya.com',
@@ -151,6 +158,7 @@ const initializeApp = async () => {
         // Setup Telegram bot handlers after DB sync
         setupBotHandlers();
 
+        appReady = true;
         console.log('✓ Application initialized successfully');
         console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
 
