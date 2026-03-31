@@ -25,7 +25,7 @@ const createPackage = async (req, res, next) => {
             return sendError(res, 400, 'Product must be approved before creating Qercha package');
         }
 
-        const package = await QerchaPackage.create({
+        const pkg = await QerchaPackage.create({
             ox_product_id,
             total_shares,
             shares_available: total_shares,
@@ -37,8 +37,8 @@ const createPackage = async (req, res, next) => {
         });
 
         return sendSuccess(res, 201, 'Qercha package created successfully', {
-            package_id: package.package_id,
-            total_shares: package.total_shares
+            package_id: pkg.package_id,
+            total_shares: pkg.total_shares
         });
     } catch (error) {
         next(error);
@@ -81,7 +81,7 @@ const joinPackage = async (req, res, next) => {
             return sendError(res, 400, 'Valid payment method is required (chapa, telebirr, or screenshot)');
         }
 
-        const package = await QerchaPackage.findByPk(id, {
+        const pkg = await QerchaPackage.findByPk(id, {
             include: [
                 {
                     model: Product,
@@ -91,23 +91,23 @@ const joinPackage = async (req, res, next) => {
             transaction
         });
 
-        if (!package) {
+        if (!pkg) {
             await transaction.rollback();
             return sendError(res, 404, 'Qercha package not found');
         }
 
-        if (package.status !== 'Active') {
+        if (pkg.status !== 'Active') {
             await transaction.rollback();
             return sendError(res, 400, 'This package is no longer active');
         }
 
-        if (shares_purchased > package.shares_available) {
+        if (shares_purchased > pkg.shares_available) {
             await transaction.rollback();
-            return sendError(res, 400, `Only ${package.shares_available} shares available`);
+            return sendError(res, 400, `Only ${pkg.shares_available} shares available`);
         }
 
         // Calculate amount based on product price
-        const pricePerShare = parseFloat(package.product.price) / package.total_shares;
+        const pricePerShare = parseFloat(pkg.product.price) / pkg.total_shares;
         const amount_paid = pricePerShare * shares_purchased;
 
         // Create order for this qercha participation
@@ -123,29 +123,29 @@ const joinPackage = async (req, res, next) => {
             shipping_phone,
             shipping_city,
             shipping_region,
-            shipping_notes: shipping_notes || `Qercha package: ${package.product.name} - ${shares_purchased} share(s)`
+            shipping_notes: shipping_notes || `Qercha package: ${pkg.product.name} - ${shares_purchased} share(s)`
         }, { transaction });
 
         // Create participant record linked to order
         const participant = await QerchaParticipant.create({
-            package_id: package.package_id,
+            package_id: pkg.package_id,
             user_id,
             shares_purchased,
             amount_paid,
-            is_host: user_id === package.host_user_id,
+            is_host: user_id === pkg.host_user_id,
             order_id: order.order_id,
             payment_status: 'Pending'
         }, { transaction });
 
         // Update available shares
-        package.shares_available -= shares_purchased;
+        pkg.shares_available -= shares_purchased;
 
         // If all shares sold, mark as Completed
-        if (package.shares_available === 0) {
-            package.status = 'Completed';
+        if (pkg.shares_available === 0) {
+            pkg.status = 'Completed';
         }
 
-        await package.save({ transaction });
+        await pkg.save({ transaction });
 
         // Initialize payment based on method
         let paymentData = null;
@@ -190,7 +190,7 @@ const joinPackage = async (req, res, next) => {
                     tx_ref,
                     callback_url: `${callbackBaseUrl}/payments/webhook/telebirr`,
                     return_url: `${callbackBaseUrl}/payments/return`,
-                    subject: `Qercha: ${package.product.name} - ${shares_purchased} share(s)`
+                    subject: `Qercha: ${pkg.product.name} - ${shares_purchased} share(s)`
                 });
             }
 
@@ -213,7 +213,7 @@ const joinPackage = async (req, res, next) => {
                 metadata: {
                     initialized_at: new Date().toISOString(),
                     user_id,
-                    qercha_package_id: package.package_id,
+                    qercha_package_id: pkg.package_id,
                     shares_purchased
                 }
             }, { transaction });
@@ -232,7 +232,7 @@ const joinPackage = async (req, res, next) => {
             order_id: order.order_id,
             shares_purchased: participant.shares_purchased,
             amount_paid: participant.amount_paid,
-            remaining_shares: package.shares_available,
+            remaining_shares: pkg.shares_available,
             payment: paymentData
         });
     } catch (error) {
@@ -281,7 +281,7 @@ const getPackageDetails = async (req, res, next) => {
     try {
         const { id } = req.params;
 
-        const package = await QerchaPackage.findByPk(id, {
+        const pkg = await QerchaPackage.findByPk(id, {
             include: [
                 {
                     model: Product,
@@ -306,11 +306,11 @@ const getPackageDetails = async (req, res, next) => {
             ]
         });
 
-        if (!package) {
+        if (!pkg) {
             return sendError(res, 404, 'Qercha package not found');
         }
 
-        return sendSuccess(res, 200, 'Package details retrieved successfully', { package });
+        return sendSuccess(res, 200, 'Package details retrieved successfully', { package: pkg });
     } catch (error) {
         next(error);
     }
@@ -330,17 +330,17 @@ const updatePackageStatus = async (req, res, next) => {
             return sendError(res, 400, 'Invalid status');
         }
 
-        const package = await QerchaPackage.findByPk(id);
-        if (!package) {
+        const pkg = await QerchaPackage.findByPk(id);
+        if (!pkg) {
             return sendError(res, 404, 'Qercha package not found');
         }
 
-        package.status = status;
-        await package.save();
+        pkg.status = status;
+        await pkg.save();
 
         return sendSuccess(res, 200, 'Package status updated', {
-            package_id: package.package_id,
-            status: package.status
+            package_id: pkg.package_id,
+            status: pkg.status
         });
     } catch (error) {
         next(error);
