@@ -97,6 +97,26 @@ const initializeApp = async () => {
             console.warn('   Tables may need manual migration if schema changed.');
         }
 
+        // Auto-migrate: add missing columns safely
+        try {
+            const [cols] = await db.sequelize.query('SHOW COLUMNS FROM qercha_packages');
+            const existing = cols.map(c => c.Field);
+            if (!existing.includes('category')) {
+                await db.sequelize.query("ALTER TABLE qercha_packages ADD COLUMN category VARCHAR(100) NULL");
+                console.log('✓ Migration: added category column to qercha_packages');
+            }
+            if (!existing.includes('start_date')) {
+                await db.sequelize.query("ALTER TABLE qercha_packages ADD COLUMN start_date DATETIME NULL");
+                console.log('✓ Migration: added start_date column to qercha_packages');
+            }
+            if (!existing.includes('expiry_date')) {
+                await db.sequelize.query("ALTER TABLE qercha_packages ADD COLUMN expiry_date DATETIME NULL");
+                console.log('✓ Migration: added expiry_date column to qercha_packages');
+            }
+        } catch (migrationErr) {
+            console.warn('⚠ Auto-migration warning:', migrationErr.message);
+        }
+
         // Setup Telegram bot handlers after DB sync
         setupBotHandlers();
 
