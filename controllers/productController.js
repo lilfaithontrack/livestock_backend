@@ -161,7 +161,7 @@ const createProduct = async (req, res, next) => {
             // Admin & Status
             // Admins can set status directly, sellers default to Pending
             status: (user_role === 'Admin' && req.body.status) ? req.body.status : 'Pending',
-            availability_status: 'available'
+            availability_status: req.body.availability_status || 'available'
         });
 
         return sendSuccess(res, 201, 'Product created successfully and pending admin approval', {
@@ -389,10 +389,10 @@ const updateProduct = async (req, res, next) => {
         // Extract all updateable fields from request body
         const {
             // Basic Information
-            name, description, product_type,
+            name, description, product_type, sub_cat_id,
             // Pricing & Inventory
-            price, deleted_price, discount_percentage,
-            stock_quantity, minimum_order_quantity,
+            price, deleted_price, discount_percentage, currency,
+            stock_quantity, minimum_order_quantity, availability_status,
             // Livestock Specific
             breed, age_months, date_of_birth, gender, weight_kg,
             height_cm, color_markings,
@@ -483,6 +483,7 @@ const updateProduct = async (req, res, next) => {
         if (name) updates.name = name;
         if (description !== undefined) updates.description = description;
         if (product_type) updates.product_type = product_type;
+        if (sub_cat_id) updates.sub_cat_id = sub_cat_id;
 
         // Pricing & Inventory
         if (price !== undefined) updates.price = price;
@@ -536,7 +537,10 @@ const updateProduct = async (req, res, next) => {
         if (social_media_links !== undefined) updates.social_media_links = typeof social_media_links === 'string' ? JSON.parse(social_media_links) : social_media_links;
 
         // Marketplace Features
+        if (req.body.featured !== undefined) updates.featured = req.body.featured;
         if (tags !== undefined) updates.tags = tags;
+        if (availability_status !== undefined) updates.availability_status = availability_status;
+        if (currency !== undefined) updates.currency = currency;
 
         // Metadata
         if (metadata !== undefined) updates.metadata = metadata;

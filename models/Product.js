@@ -124,6 +124,106 @@ const Product = sequelize.define('products', {
         comment: 'Allow orders when out of stock'
     },
 
+    // === LIVESTOCK SPECIFIC ===
+    breed: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Breed of the animal (e.g. Boran, Holstein, Horro)'
+    },
+    age_months: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Age of the animal in months'
+    },
+    date_of_birth: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        comment: 'Date of birth of the animal'
+    },
+    gender: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        comment: 'Gender of the animal (Male, Female)'
+    },
+    weight_kg: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        comment: 'Weight in kilograms'
+    },
+    height_cm: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        comment: 'Height in centimeters'
+    },
+    color_markings: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Color and markings description'
+    },
+    mother_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Reference to mother product for lineage tracking'
+    },
+    father_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Reference to father product for lineage tracking'
+    },
+
+    // === HEALTH & MEDICAL ===
+    health_status: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        defaultValue: 'unknown',
+        comment: 'Current health status (healthy, sick, recovering, unknown)'
+    },
+    vaccination_records: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Array of vaccination records'
+    },
+    medical_history: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Medical history notes'
+    },
+    veterinary_certificates: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Array of veterinary certificate URLs'
+    },
+    last_health_checkup: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        comment: 'Date of last health checkup'
+    },
+
+    // === GENETICS & PERFORMANCE ===
+    genetic_traits: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Genetic traits and characteristics'
+    },
+    milk_production_liters_per_day: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        comment: 'Daily milk production in liters'
+    },
+    breeding_history: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Breeding history notes'
+    },
+    offspring_count: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'Number of offspring'
+    },
+
     // === PRODUCT SPECIFICATIONS ===
     // Generic fields for dimensions, weight, and attributes that work for any product type
     weight: {

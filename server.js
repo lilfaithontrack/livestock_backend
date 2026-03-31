@@ -99,19 +99,50 @@ const initializeApp = async () => {
 
         // Auto-migrate: add missing columns safely
         try {
-            const [cols] = await db.sequelize.query('SHOW COLUMNS FROM qercha_packages');
-            const existing = cols.map(c => c.Field);
-            if (!existing.includes('category')) {
+            // --- qercha_packages ---
+            const [qCols] = await db.sequelize.query('SHOW COLUMNS FROM qercha_packages');
+            const qExisting = qCols.map(c => c.Field);
+            if (!qExisting.includes('category')) {
                 await db.sequelize.query("ALTER TABLE qercha_packages ADD COLUMN category VARCHAR(100) NULL");
-                console.log('✓ Migration: added category column to qercha_packages');
+                console.log('✓ Migration: added category to qercha_packages');
             }
-            if (!existing.includes('start_date')) {
+            if (!qExisting.includes('start_date')) {
                 await db.sequelize.query("ALTER TABLE qercha_packages ADD COLUMN start_date DATETIME NULL");
-                console.log('✓ Migration: added start_date column to qercha_packages');
+                console.log('✓ Migration: added start_date to qercha_packages');
             }
-            if (!existing.includes('expiry_date')) {
+            if (!qExisting.includes('expiry_date')) {
                 await db.sequelize.query("ALTER TABLE qercha_packages ADD COLUMN expiry_date DATETIME NULL");
-                console.log('✓ Migration: added expiry_date column to qercha_packages');
+                console.log('✓ Migration: added expiry_date to qercha_packages');
+            }
+
+            // --- products: livestock-specific columns ---
+            const [pCols] = await db.sequelize.query('SHOW COLUMNS FROM products');
+            const pExisting = pCols.map(c => c.Field);
+            const productMigrations = [
+                { col: 'breed', sql: "VARCHAR(100) NULL" },
+                { col: 'age_months', sql: "INT NULL" },
+                { col: 'date_of_birth', sql: "DATE NULL" },
+                { col: 'gender', sql: "VARCHAR(20) NULL" },
+                { col: 'weight_kg', sql: "DECIMAL(10,2) NULL" },
+                { col: 'height_cm', sql: "DECIMAL(10,2) NULL" },
+                { col: 'color_markings', sql: "VARCHAR(255) NULL" },
+                { col: 'mother_id', sql: "CHAR(36) NULL" },
+                { col: 'father_id', sql: "CHAR(36) NULL" },
+                { col: 'health_status', sql: "VARCHAR(50) NULL DEFAULT 'unknown'" },
+                { col: 'vaccination_records', sql: "JSON NULL" },
+                { col: 'medical_history', sql: "TEXT NULL" },
+                { col: 'veterinary_certificates', sql: "JSON NULL" },
+                { col: 'last_health_checkup', sql: "DATE NULL" },
+                { col: 'genetic_traits', sql: "TEXT NULL" },
+                { col: 'milk_production_liters_per_day', sql: "DECIMAL(10,2) NULL" },
+                { col: 'breeding_history', sql: "TEXT NULL" },
+                { col: 'offspring_count', sql: "INT NULL DEFAULT 0" },
+            ];
+            for (const m of productMigrations) {
+                if (!pExisting.includes(m.col)) {
+                    await db.sequelize.query(`ALTER TABLE products ADD COLUMN ${m.col} ${m.sql}`);
+                    console.log(`✓ Migration: added ${m.col} to products`);
+                }
             }
         } catch (migrationErr) {
             console.warn('⚠ Auto-migration warning:', migrationErr.message);
