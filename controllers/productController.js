@@ -289,6 +289,12 @@ const getProducts = async (req, res, next) => {
                             attributes: ['cat_id', 'name', 'slug']
                         }
                     ]
+                },
+                {
+                    model: QerchaPackage,
+                    as: 'qercha_packages',
+                    where: { status: 'Active' },
+                    required: false
                 }
             ],
             order: [[sort, order.toUpperCase()]]
@@ -345,6 +351,12 @@ const getProductById = async (req, res, next) => {
                     model: Product,
                     as: 'father',
                     attributes: ['product_id', 'name', 'metadata']
+                },
+                {
+                    model: QerchaPackage,
+                    as: 'qercha_packages',
+                    where: { status: 'Active' },
+                    required: false
                 }
             ]
         });

@@ -126,12 +126,20 @@ exports.createEarning = async (order_id, seller_id, order_amount, transaction = 
             transaction
         });
 
-        // Only create earnings for commission plans
-        if (!sellerPlan || sellerPlan.plan_type !== 'commission') {
+        // Allow both commission and subscription plans.
+        // Subscription plans usually have 0% commission unless otherwise specified, 
+        // while standard commission plans default to 15%.
+        if (!sellerPlan) {
             return null;
         }
 
-        const commissionRate = parseFloat(sellerPlan.commission_rate) || 15;
+        let commissionRate = 0;
+        if (sellerPlan.plan_type === 'commission') {
+            commissionRate = parseFloat(sellerPlan.commission_rate) || 15;
+        } else if (sellerPlan.plan_type === 'subscription') {
+            commissionRate = parseFloat(sellerPlan.commission_rate) || 0;
+        }
+
         const commissionAmount = (order_amount * commissionRate) / 100;
         const netAmount = order_amount - commissionAmount;
 

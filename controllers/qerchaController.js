@@ -15,14 +15,14 @@ const createPackage = async (req, res, next) => {
             return sendError(res, 400, 'Product ID and valid total shares (minimum 2) are required');
         }
 
-        // Verify product exists and is Live
+        // Verify product exists and is either Live or Pending
         const product = await Product.findByPk(ox_product_id);
         if (!product) {
             return sendError(res, 404, 'Product not found');
         }
 
-        if (product.status !== 'Live') {
-            return sendError(res, 400, 'Product must be approved before creating Qercha package');
+        if (product.status !== 'Live' && product.status !== 'Pending') {
+            return sendError(res, 400, 'Product must be Live or Pending to create a Qercha package');
         }
 
         const pkg = await QerchaPackage.create({
@@ -256,7 +256,8 @@ const getPackages = async (req, res, next) => {
             include: [
                 {
                     model: Product,
-                    as: 'product'
+                    as: 'product',
+                    where: { status: 'Live' }
                 },
                 {
                     model: User,

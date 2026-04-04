@@ -123,6 +123,9 @@ const formatProductResponse = (product) => {
     productData.is_available = isProductAvailable(productData);
     productData.is_in_stock = productData.stock_quantity > 0;
 
+    // Add Qercha flag
+    productData.is_qercha = !!(productData.qercha_packages && productData.qercha_packages.length > 0);
+
     // Format rating
     if (productData.rating) {
         productData.rating = parseFloat(productData.rating);
