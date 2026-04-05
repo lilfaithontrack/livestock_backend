@@ -127,6 +127,16 @@ const Rental = sequelize.define('rentals', {
         defaultValue: {},
         comment: 'Flexible JSON for rental-type specific attributes'
     },
+    seating_capacity: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'How many people can handle or seat'
+    },
+    rental_duration_limit: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Timer or maximum duration limit'
+    },
     is_available: {
         type: DataTypes.BOOLEAN,
         defaultValue: true

@@ -150,7 +150,9 @@ exports.createRental = async (req, res) => {
             video_urls,
             specifications,
             available_from,
-            available_until
+            available_until,
+            seating_capacity,
+            rental_duration_limit
         } = req.body;
 
         if (!category_id || !title || !price || !contact_phone) {
@@ -205,6 +207,8 @@ exports.createRental = async (req, res) => {
             specifications: parsedSpecifications || {},
             available_from,
             available_until,
+            seating_capacity: seating_capacity ? parseInt(seating_capacity) : null,
+            rental_duration_limit,
             status: 'pending'
         });
 
@@ -235,7 +239,8 @@ exports.updateRental = async (req, res) => {
             'price', 'price_unit', 'currency', 'negotiable', 'contact_phone',
             'contact_name', 'whatsapp_available', 'telegram_available', 'location',
             'location_am', 'city', 'region', 'latitude', 'longitude',
-            'video_urls', 'specifications', 'is_available', 'available_from', 'available_until'
+            'video_urls', 'specifications', 'is_available', 'available_from', 'available_until',
+            'seating_capacity', 'rental_duration_limit'
         ];
 
         const updates = {};
@@ -494,7 +499,9 @@ exports.adminCreateRental = async (req, res) => {
             available_from,
             available_until,
             status,
-            featured
+            featured,
+            seating_capacity,
+            rental_duration_limit
         } = req.body;
 
         if (!category_id || !title || !price || !contact_phone) {
@@ -548,6 +555,8 @@ exports.adminCreateRental = async (req, res) => {
             specifications: parsedSpecifications || {},
             available_from,
             available_until,
+            seating_capacity: seating_capacity ? parseInt(seating_capacity) : null,
+            rental_duration_limit,
             status: status || 'approved',
             featured: featured === 'true' || featured === true,
             admin_approved_by: req.user.user_id,
