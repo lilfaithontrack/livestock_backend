@@ -81,7 +81,7 @@ const registerDelivery = async (req, res, next) => {
                 return sendError(res, 400, 'Invalid agent');
             }
             deliveryData.agent_id = agent_id;
-            deliveryData.status = 'Assigned';
+            deliveryData.status = 'Pending';
         }
 
         // Create delivery
@@ -256,7 +256,7 @@ const updateDeliveryAssignment = async (req, res, next) => {
 
         await delivery.update({
             agent_id,
-            status: 'Assigned'
+            status: 'Pending'
         });
 
         // Update order

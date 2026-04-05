@@ -580,7 +580,7 @@ const assignAgentToOrder = async (req, res, next) => {
             admin_assigned_by: admin_id,
             start_location: order.shipping_address,
             end_location: order.shipping_address,
-            status: 'Assigned'
+            status: 'Pending'
         });
 
         // TODO: Send notification to agent about new assignment
@@ -992,12 +992,87 @@ const getAgentAssignedOrders = async (req, res, next) => {
                     model: User,
                     as: 'buyer',
                     attributes: ['user_id', 'email', 'phone', 'address']
+                },
+                {
+                    model: Delivery,
+                    as: 'delivery',
+                    attributes: ['status', 'delivery_id']
                 }
             ],
             order: [['approved_at', 'ASC']]
         });
 
         return sendSuccess(res, 200, 'Assigned orders retrieved', { orders });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Agent accepts delivery assignment
+ * POST /api/v1/agent/orders/:id/accept
+ */
+const acceptDelivery = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const agent_id = req.user.user_id;
+
+        const delivery = await Delivery.findOne({ where: { order_id: id, agent_id } });
+
+        if (!delivery) {
+            return sendError(res, 404, 'Delivery assignment not found');
+        }
+
+        if (delivery.status !== 'Pending') {
+            return sendError(res, 400, `Cannot accept delivery in ${delivery.status} state`);
+        }
+
+        await delivery.update({ status: 'Assigned' });
+
+        return sendSuccess(res, 200, 'Delivery assignment accepted', {
+            order_id: id,
+            status: 'Assigned'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Agent rejects delivery assignment
+ * POST /api/v1/agent/orders/:id/reject
+ */
+const rejectDelivery = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const agent_id = req.user.user_id;
+
+        const delivery = await Delivery.findOne({ where: { order_id: id, agent_id } });
+
+        if (!delivery) {
+            return sendError(res, 404, 'Delivery assignment not found');
+        }
+
+        if (delivery.status !== 'Pending') {
+            return sendError(res, 400, `Cannot reject delivery in ${delivery.status} state`);
+        }
+
+        // Update delivery status to Cancelled
+        await delivery.update({ status: 'Cancelled' });
+
+        // Revert order status and clear agent
+        await Order.update(
+            { 
+                order_status: 'Approved',
+                assigned_agent_id: null
+            },
+            { where: { order_id: id } }
+        );
+
+        return sendSuccess(res, 200, 'Delivery assignment rejected', {
+            order_id: id,
+            status: 'Cancelled'
+        });
     } catch (error) {
         next(error);
     }
@@ -1023,5 +1098,7 @@ module.exports = {
     getOrderQRCode,
     resendDeliveryOTP,
     updateAgentLocation,
-    getAgentAssignedOrders
+    getAgentAssignedOrders,
+    acceptDelivery,
+    rejectDelivery
 };

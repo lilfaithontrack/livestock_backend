@@ -44,6 +44,12 @@ router.get('/agent/:agentId', verifyToken, requireRole(['Agent', 'Admin']), deli
 // Get agent's assigned orders
 router.get('/agent/orders/assigned', verifyToken, requireRole(['Agent']), deliveryController.getAgentAssignedOrders);
 
+// Agent accepts delivery assignment
+router.post('/agent/orders/:id/accept', verifyToken, requireRole(['Agent']), deliveryController.acceptDelivery);
+
+// Agent rejects delivery assignment
+router.post('/agent/orders/:id/reject', verifyToken, requireRole(['Agent']), deliveryController.rejectDelivery);
+
 // Update agent location
 router.put('/agent/location', verifyToken, requireRole(['Agent']), deliveryController.updateAgentLocation);
 
