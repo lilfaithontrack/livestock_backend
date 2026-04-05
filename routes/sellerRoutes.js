@@ -31,15 +31,11 @@ router.get('/earnings', verifyToken, requireRole(['Seller']), async (req, res) =
         }) || 0;
 
         res.json({
-            success: true,
-            message: 'Earnings retrieved successfully',
-            data: {
-                earnings: {
-                    total_earned: totalEarned,
-                    pending_clearance: pendingClearance,
-                    available_for_withdrawal: availableForWithdrawal,
-                    total_withdrawn: totalWithdrawn
-                }
+            earnings: {
+                total_earned: totalEarned,
+                pending_clearance: pendingClearance,
+                available_for_withdrawal: availableForWithdrawal,
+                total_withdrawn: totalWithdrawn
             }
         });
     } catch (error) {
