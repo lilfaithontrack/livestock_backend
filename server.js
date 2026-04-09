@@ -27,7 +27,7 @@ app.use((req, res, next) => {
 
 // Middleware
 const allowedProductionOrigins = [
-    'http://admin.shegergebeya.com',
+    'https://shegergebeya.com',
     'https://admin.shegergebeya.com',
 ];
 
@@ -161,6 +161,19 @@ const initializeApp = async () => {
         appReady = true;
         console.log('✓ Application initialized successfully');
         console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+
+        // Schedule: make pending earnings available every hour
+        const earningsController = require('./controllers/earningsController');
+        setInterval(async () => {
+            try {
+                const count = await earningsController.makeEarningsAvailable();
+                if (count > 0) console.log(`✓ Earnings scheduler: ${count} earnings made available`);
+            } catch (err) {
+                console.error('Earnings scheduler error:', err.message);
+            }
+        }, 60 * 60 * 1000); // Every 1 hour
+        // Also run once on startup
+        earningsController.makeEarningsAvailable().catch(() => {});
 
     } catch (error) {
         console.error('✗ Database connection failed:', error.message);

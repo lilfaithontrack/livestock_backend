@@ -281,6 +281,33 @@ exports.getSellerDashboard = async (req, res) => {
             current_products: productCount
         };
 
+        // Always include earnings summary regardless of plan type
+        const totalEarnings = await SellerEarnings.sum('net_amount', {
+            where: { seller_id }
+        }) || 0;
+
+        const totalCommission = await SellerEarnings.sum('commission_amount', {
+            where: { seller_id }
+        }) || 0;
+
+        const availableBalance = await SellerEarnings.sum('net_amount', {
+            where: { seller_id, status: 'available' }
+        }) || 0;
+
+        const pendingBalance = await SellerEarnings.sum('net_amount', {
+            where: { seller_id, status: 'pending' }
+        }) || 0;
+
+        const withdrawnAmount = await SellerEarnings.sum('net_amount', {
+            where: { seller_id, status: 'withdrawn' }
+        }) || 0;
+
+        dashboardData.total_earnings = totalEarnings;
+        dashboardData.total_commission_paid = totalCommission;
+        dashboardData.available_balance = availableBalance;
+        dashboardData.pending_balance = pendingBalance;
+        dashboardData.withdrawn_amount = withdrawnAmount;
+
         if (currentPlan.plan_type === 'subscription') {
             dashboardData.max_products = currentPlan.max_products;
             dashboardData.posts_remaining = Math.max(0, currentPlan.max_products - productCount);
@@ -299,23 +326,6 @@ exports.getSellerDashboard = async (req, res) => {
             dashboardData.commission_rate = currentPlan.commission_rate;
             dashboardData.posts_remaining = 'unlimited';
             dashboardData.can_post = true;
-
-            // Get earnings summary
-            const totalEarnings = await SellerEarnings.sum('net_amount', {
-                where: { seller_id }
-            }) || 0;
-
-            const totalCommission = await SellerEarnings.sum('commission_amount', {
-                where: { seller_id }
-            }) || 0;
-
-            const availableBalance = await SellerEarnings.sum('net_amount', {
-                where: { seller_id, status: 'available' }
-            }) || 0;
-
-            dashboardData.total_earnings = totalEarnings;
-            dashboardData.total_commission_paid = totalCommission;
-            dashboardData.available_balance = availableBalance;
         }
 
         res.json(dashboardData);
