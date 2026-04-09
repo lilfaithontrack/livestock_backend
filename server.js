@@ -27,7 +27,7 @@ app.use((req, res, next) => {
 
 // Middleware
 const allowedProductionOrigins = [
-    'https://shegergebeya.com',
+      'https://shegergebeya.com',
     'https://admin.shegergebeya.com',
 ];
 
