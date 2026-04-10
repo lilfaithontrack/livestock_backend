@@ -14,5 +14,6 @@ router.get('/dashboard', authorize('Seller'), earningsController.getSellerDashbo
 
 // Admin routes
 router.get('/stats', authorize('Admin'), earningsController.getAllEarningsStats);
+router.post('/backfill', authorize('Admin'), earningsController.backfillEarnings);
 
 module.exports = router;

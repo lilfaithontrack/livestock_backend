@@ -126,18 +126,16 @@ exports.createEarning = async (order_id, seller_id, order_amount, transaction = 
             transaction
         });
 
-        // Allow both commission and subscription plans.
-        // Subscription plans usually have 0% commission unless otherwise specified, 
-        // while standard commission plans default to 15%.
-        if (!sellerPlan) {
-            return null;
-        }
-
+        // Determine commission rate based on plan (default 0% if no plan)
         let commissionRate = 0;
-        if (sellerPlan.plan_type === 'commission') {
-            commissionRate = parseFloat(sellerPlan.commission_rate) || 15;
-        } else if (sellerPlan.plan_type === 'subscription') {
-            commissionRate = parseFloat(sellerPlan.commission_rate) || 0;
+        if (sellerPlan) {
+            if (sellerPlan.plan_type === 'commission') {
+                commissionRate = parseFloat(sellerPlan.commission_rate) || 15;
+            } else if (sellerPlan.plan_type === 'subscription') {
+                commissionRate = parseFloat(sellerPlan.commission_rate) || 0;
+            }
+        } else {
+            console.warn(`Seller ${seller_id} has no active plan — creating earning with 0% commission`);
         }
 
         const commissionAmount = (order_amount * commissionRate) / 100;
@@ -185,6 +183,105 @@ exports.makeEarningsAvailable = async () => {
     } catch (error) {
         console.error('Error making earnings available:', error);
         throw error;
+    }
+};
+
+// Backfill earnings for paid orders that don't have earning records
+exports.backfillEarnings = async (req, res) => {
+    try {
+        // Find all paid orders that don't have corresponding earnings
+        const paidOrders = await Order.findAll({
+            where: { payment_status: 'Paid' },
+            include: [{
+                model: require('../models').OrderItem,
+                as: 'items',
+                include: [{ model: require('../models').Product, as: 'product' }]
+            }]
+        });
+
+        let created = 0;
+        let skipped = 0;
+        const now = new Date();
+
+        for (const order of paidOrders) {
+            // Group items by seller
+            const sellerTotals = {};
+            if (order.items && order.items.length > 0) {
+                for (const item of order.items) {
+                    if (item.seller_id) {
+                        const itemTotal = parseFloat(item.unit_price) * parseInt(item.quantity);
+                        sellerTotals[item.seller_id] = (sellerTotals[item.seller_id] || 0) + itemTotal;
+                    }
+                }
+            }
+
+            for (const sellerId in sellerTotals) {
+                // Check if earning already exists for this order+seller
+                const existing = await SellerEarnings.findOne({
+                    where: { order_id: order.order_id, seller_id: sellerId }
+                });
+
+                if (existing) {
+                    skipped++;
+                    continue;
+                }
+
+                try {
+                    const orderAmount = sellerTotals[sellerId];
+
+                    // Get seller's plan for commission rate
+                    const sellerPlan = await SellerPlan.findOne({
+                        where: { seller_id: sellerId, is_active: true, payment_status: 'paid' }
+                    });
+
+                    let commissionRate = 0;
+                    if (sellerPlan) {
+                        if (sellerPlan.plan_type === 'commission') {
+                            commissionRate = parseFloat(sellerPlan.commission_rate) || 15;
+                        } else if (sellerPlan.plan_type === 'subscription') {
+                            commissionRate = parseFloat(sellerPlan.commission_rate) || 0;
+                        }
+                    }
+
+                    const commissionAmount = (orderAmount * commissionRate) / 100;
+                    const netAmount = orderAmount - commissionAmount;
+
+                    // Use order date + 7 days as available date
+                    const orderDate = new Date(order.created_at || order.createdAt);
+                    const availableDate = new Date(orderDate);
+                    availableDate.setDate(availableDate.getDate() + 7);
+
+                    // If available_date is in the past, mark as 'available' directly
+                    const status = availableDate <= now ? 'available' : 'pending';
+
+                    await SellerEarnings.create({
+                        seller_id: sellerId,
+                        order_id: order.order_id,
+                        order_amount: orderAmount,
+                        commission_rate: commissionRate,
+                        commission_amount: commissionAmount,
+                        net_amount: netAmount,
+                        status,
+                        available_date: availableDate
+                    });
+
+                    created++;
+                } catch (err) {
+                    console.error(`Backfill failed for order ${order.order_id}, seller ${sellerId}:`, err.message);
+                }
+            }
+        }
+
+        console.log(`Backfill complete: ${created} earnings created, ${skipped} skipped (already exist)`);
+        res.json({
+            success: true,
+            message: `Backfill complete: ${created} earnings created, ${skipped} already existed`,
+            created,
+            skipped
+        });
+    } catch (error) {
+        console.error('Error backfilling earnings:', error);
+        res.status(500).json({ error: 'Failed to backfill earnings' });
     }
 };
 
