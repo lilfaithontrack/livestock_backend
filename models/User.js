@@ -117,6 +117,36 @@ const User = sequelize.define('users', {
         type: DataTypes.STRING,
         allowNull: true,
         comment: 'Expo push token for notifications'
+    },
+    agent_total_deliveries: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        comment: 'Total deliveries completed by agent'
+    },
+    agent_rating: {
+        type: DataTypes.DECIMAL(3, 2),
+        defaultValue: 5.00,
+        comment: 'Agent average rating'
+    },
+    agent_rating_count: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        comment: 'Number of ratings received by agent'
+    },
+    agent_bank_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Agent bank name for payouts'
+    },
+    agent_account_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Agent bank account holder name'
+    },
+    agent_account_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Agent bank account number'
     }
 }, {
     hooks: {

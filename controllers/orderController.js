@@ -1,5 +1,5 @@
 const {
-    Order, OrderItem, Product, User, QerchaPackage, QerchaParticipant
+    Order, OrderItem, Product, User, QerchaPackage, QerchaParticipant, Delivery
 } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const sequelize = require('../config/database');
@@ -265,7 +265,7 @@ const getOrderById = async (req, res, next) => {
                         {
                             model: User,
                             as: 'seller',
-                            attributes: ['user_id', 'email', 'phone']
+                            attributes: ['user_id', 'email', 'phone', 'address']
                         }
                     ]
                 },
@@ -273,6 +273,11 @@ const getOrderById = async (req, res, next) => {
                     model: User,
                     as: 'buyer',
                     attributes: ['user_id', 'email', 'phone', 'address']
+                },
+                {
+                    model: Delivery,
+                    as: 'delivery',
+                    attributes: ['delivery_id', 'status', 'agent_id', 'pickup_confirmed_at', 'delivery_confirmed_at']
                 }
             ]
         });
@@ -532,7 +537,12 @@ const getSellerOrders = async (req, res, next) => {
                 {
                     model: User,
                     as: 'buyer',
-                    attributes: ['user_id', 'email', 'phone']
+                    attributes: ['user_id', 'email', 'phone', 'address']
+                },
+                {
+                    model: Delivery,
+                    as: 'delivery',
+                    attributes: ['delivery_id', 'status', 'agent_id']
                 }
             ],
             order: [['created_at', 'DESC']]

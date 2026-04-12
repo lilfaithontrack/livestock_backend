@@ -151,6 +151,37 @@ const initializeApp = async () => {
                     console.log(`✓ Migration: added ${m.col} to products`);
                 }
             }
+            // --- users: agent-specific columns ---
+            const [uCols] = await db.sequelize.query('SHOW COLUMNS FROM users');
+            const uExisting = uCols.map(c => c.Field);
+            const userAgentMigrations = [
+                { col: 'agent_total_deliveries', sql: "INT DEFAULT 0" },
+                { col: 'agent_rating', sql: "DECIMAL(3,2) DEFAULT 5.00" },
+                { col: 'agent_rating_count', sql: "INT DEFAULT 0" },
+                { col: 'agent_bank_name', sql: "VARCHAR(100) NULL" },
+                { col: 'agent_account_name', sql: "VARCHAR(200) NULL" },
+                { col: 'agent_account_number', sql: "VARCHAR(50) NULL" },
+            ];
+            for (const m of userAgentMigrations) {
+                if (!uExisting.includes(m.col)) {
+                    await db.sequelize.query(`ALTER TABLE users ADD COLUMN ${m.col} ${m.sql}`);
+                    console.log(`✓ Migration: added ${m.col} to users`);
+                }
+            }
+
+            // --- orders: delivery fee columns ---
+            const [oCols] = await db.sequelize.query('SHOW COLUMNS FROM orders');
+            const oExisting = oCols.map(c => c.Field);
+            const orderDeliveryMigrations = [
+                { col: 'delivery_fee', sql: "DECIMAL(10,2) DEFAULT 0" },
+                { col: 'delivery_distance_km', sql: "DECIMAL(10,2) NULL" },
+            ];
+            for (const m of orderDeliveryMigrations) {
+                if (!oExisting.includes(m.col)) {
+                    await db.sequelize.query(`ALTER TABLE orders ADD COLUMN ${m.col} ${m.sql}`);
+                    console.log(`✓ Migration: added ${m.col} to orders`);
+                }
+            }
         } catch (migrationErr) {
             console.warn('⚠ Auto-migration warning:', migrationErr.message);
         }
