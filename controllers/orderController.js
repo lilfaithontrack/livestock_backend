@@ -277,7 +277,7 @@ const getOrderById = async (req, res, next) => {
                 {
                     model: Delivery,
                     as: 'delivery',
-                    attributes: ['delivery_id', 'status', 'agent_id', 'pickup_confirmed_at', 'delivery_confirmed_at']
+                    attributes: ['delivery_id', 'status', 'agent_id', 'seller_delivery_agent_id', 'assignment_type', 'pickup_location', 'delivery_location', 'pickup_confirmed_at', 'delivery_confirmed_at']
                 }
             ]
         });
@@ -542,7 +542,7 @@ const getSellerOrders = async (req, res, next) => {
                 {
                     model: Delivery,
                     as: 'delivery',
-                    attributes: ['delivery_id', 'status', 'agent_id']
+                    attributes: ['delivery_id', 'status', 'agent_id', 'seller_delivery_agent_id', 'assignment_type']
                 }
             ],
             order: [['created_at', 'DESC']]

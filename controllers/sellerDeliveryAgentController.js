@@ -1,6 +1,7 @@
 const { SellerDeliveryAgent, Delivery, Order, OrderItem, User } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { Op } = require('sequelize');
+const { generateOrderQR, generateDeliveryOTP } = require('../utils/qrGenerator');
 
 /**
  * Register a new delivery agent (Seller)
@@ -286,23 +287,26 @@ const assignAgentToOrder = async (req, res, next) => {
         }
 
         if (delivery) {
-            // Update existing pending delivery
+            // Reset cancelled / pending row — agent must accept in delivery app first
             await delivery.update({
                 seller_delivery_agent_id: agent_id,
                 seller_assigned_by: seller_id,
                 assignment_type: 'seller',
-                status: 'Assigned',
+                status: 'Pending',
+                agent_id: null,
                 delivery_notes: delivery_notes || delivery.delivery_notes,
-                pickup_location: pickup_location || delivery.pickup_location
+                pickup_location: pickup_location || delivery.pickup_location,
+                delivery_location: order.buyer ? {
+                    address: order.shipping_address || order.buyer.address
+                } : delivery.delivery_location
             });
         } else {
-            // Create new delivery record
             delivery = await Delivery.create({
                 order_id: orderId,
                 seller_delivery_agent_id: agent_id,
                 seller_assigned_by: seller_id,
                 assignment_type: 'seller',
-                status: 'Assigned',
+                status: 'Pending',
                 delivery_notes: delivery_notes || null,
                 pickup_location: pickup_location || null,
                 delivery_location: order.buyer ? {
@@ -311,8 +315,25 @@ const assignAgentToOrder = async (req, res, next) => {
             });
         }
 
-        // Update order status
-        await order.update({ order_status: 'Assigned' });
+        // Buyer QR/OTP for handover (same as admin-approved flow)
+        if (order.payment_status === 'Paid' && !order.qr_code_hash) {
+            const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
+            const { otp, otpHash, expiresAt } = generateDeliveryOTP();
+            await order.update({
+                qr_code: qrCode,
+                qr_code_hash: qrCodeHash,
+                delivery_otp_hash: otpHash,
+                delivery_otp_expires_at: expiresAt,
+                approved_at: order.approved_at || new Date()
+            });
+            console.log(`[seller-assign] Order ${order.order_id} QR/OTP ready. Dev OTP: ${otp}`);
+        }
+
+        await order.update({
+            order_status: 'Assigned',
+            delivery_type: 'platform',
+            assigned_agent_id: null
+        });
 
         return sendSuccess(res, 200, 'Delivery agent assigned successfully', {
             delivery,

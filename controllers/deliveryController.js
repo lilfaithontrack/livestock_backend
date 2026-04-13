@@ -701,7 +701,7 @@ const getNearbyAgents = async (req, res, next) => {
 const confirmPickup = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const agent_id = req.user.user_id;
+        const isSellerFleetAgent = Boolean(req.user.seller_id && req.user.agent_id);
 
         const order = await Order.findByPk(id);
 
@@ -709,7 +709,16 @@ const confirmPickup = async (req, res, next) => {
             return sendError(res, 404, 'Order not found');
         }
 
-        if (order.assigned_agent_id !== agent_id) {
+        const delivery = await Delivery.findOne({ where: { order_id: id } });
+        if (!delivery) {
+            return sendError(res, 404, 'Delivery not found');
+        }
+
+        if (isSellerFleetAgent) {
+            if (delivery.seller_delivery_agent_id !== req.user.agent_id) {
+                return sendError(res, 403, 'You are not assigned to this delivery');
+            }
+        } else if (order.assigned_agent_id !== req.user.user_id) {
             return sendError(res, 403, 'You are not assigned to this order');
         }
 
@@ -717,22 +726,26 @@ const confirmPickup = async (req, res, next) => {
             return sendError(res, 400, 'Order must be in Assigned status');
         }
 
-        // Update order status
+        if (delivery.status !== 'Assigned') {
+            return sendError(res, 400, 'Accept the delivery in the app before confirming pickup');
+        }
+
         await order.update({
             order_status: 'In_Transit',
             picked_up_at: new Date()
         });
 
-        // Update delivery status
+        const deliveryWhere = isSellerFleetAgent
+            ? { order_id: id, seller_delivery_agent_id: req.user.agent_id }
+            : { order_id: id, agent_id: req.user.user_id };
+
         await Delivery.update(
             {
                 status: 'In_Transit',
                 pickup_confirmed_at: new Date()
             },
-            { where: { order_id: id, agent_id } }
+            { where: deliveryWhere }
         );
-
-        // TODO: Send notification to buyer that order is on the way
 
         return sendSuccess(res, 200, 'Pickup confirmed', {
             order_id: order.order_id,
@@ -751,7 +764,8 @@ const verifyDelivery = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { verification_type, code } = req.body;
-        const agent_id = req.user.user_id;
+        const isSellerFleetAgent = Boolean(req.user.seller_id && req.user.agent_id);
+        const platformAgentId = req.user.user_id;
 
         if (!verification_type || !code) {
             return sendError(res, 400, 'Verification type and code required');
@@ -767,7 +781,16 @@ const verifyDelivery = async (req, res, next) => {
             return sendError(res, 404, 'Order not found');
         }
 
-        if (order.assigned_agent_id !== agent_id) {
+        const delivery = await Delivery.findOne({ where: { order_id: id } });
+        if (!delivery) {
+            return sendError(res, 404, 'Delivery not found');
+        }
+
+        if (isSellerFleetAgent) {
+            if (delivery.seller_delivery_agent_id !== req.user.agent_id) {
+                return sendError(res, 403, 'You are not assigned to this delivery');
+            }
+        } else if (order.assigned_agent_id !== platformAgentId) {
             return sendError(res, 403, 'You are not assigned to this order');
         }
 
@@ -791,13 +814,11 @@ const verifyDelivery = async (req, res, next) => {
             return sendError(res, 401, 'Invalid verification code');
         }
 
-        // Complete the delivery
         await order.update({
             order_status: 'Delivered',
             delivered_at: new Date()
         });
 
-        // Make seller earnings available immediately on delivery
         try {
             await SellerEarnings.update(
                 { status: 'available', available_date: new Date() },
@@ -807,29 +828,32 @@ const verifyDelivery = async (req, res, next) => {
             console.error('Error updating seller earnings on delivery:', earningErr);
         }
 
-        // Update delivery record
-        const delivery = await Delivery.findOne({ where: { order_id: id, agent_id } });
+        const deliveryWhere = isSellerFleetAgent
+            ? { order_id: id, seller_delivery_agent_id: req.user.agent_id }
+            : { order_id: id, agent_id: platformAgentId };
+
         await Delivery.update(
             {
                 status: 'Delivered',
                 delivery_confirmed_at: new Date(),
                 verification_method: verification_type
             },
-            { where: { order_id: id, agent_id } }
+            { where: deliveryWhere }
         );
 
-        // Create agent earnings for this delivery
         let agentEarning = null;
-        try {
-            agentEarning = await createAgentEarning(
-                order.order_id,
-                agent_id,
-                delivery?.delivery_id,
-                order.delivery_distance_km
-            );
-        } catch (earningError) {
-            console.error('Error creating agent earning:', earningError);
-            // Don't fail the delivery verification if earnings creation fails
+        if (!isSellerFleetAgent) {
+            try {
+                const dRow = await Delivery.findOne({ where: deliveryWhere });
+                agentEarning = await createAgentEarning(
+                    order.order_id,
+                    platformAgentId,
+                    dRow?.delivery_id,
+                    order.delivery_distance_km
+                );
+            } catch (earningError) {
+                console.error('Error creating agent earning:', earningError);
+            }
         }
 
         // TODO: Send notification to buyer and seller about completed delivery
@@ -969,9 +993,62 @@ const updateAgentLocation = async (req, res, next) => {
 /**
  * Get agent's assigned orders
  * GET /api/v1/agent/orders/assigned
+ * - Platform agents: orders.assigned_agent_id = user
+ * - Seller fleet agents (JWT seller_id): deliveries.seller_delivery_agent_id = agent_id
  */
 const getAgentAssignedOrders = async (req, res, next) => {
     try {
+        const isSellerFleetAgent = Boolean(req.user.seller_id && req.user.agent_id);
+
+        if (isSellerFleetAgent) {
+            const sellerAgentId = req.user.agent_id;
+
+            const deliveries = await Delivery.findAll({
+                where: {
+                    seller_delivery_agent_id: sellerAgentId,
+                    status: { [Op.in]: ['Pending', 'Assigned', 'In_Transit'] }
+                },
+                include: [{
+                    model: Order,
+                    as: 'order',
+                    required: true,
+                    where: {
+                        order_status: { [Op.in]: ['Placed', 'Paid', 'Approved', 'Assigned', 'In_Transit'] }
+                    },
+                    include: [
+                        {
+                            model: OrderItem,
+                            as: 'items',
+                            include: [
+                                { model: Product, as: 'product' },
+                                { model: User, as: 'seller', attributes: ['user_id', 'email', 'phone', 'address'] }
+                            ]
+                        },
+                        {
+                            model: User,
+                            as: 'buyer',
+                            attributes: ['user_id', 'email', 'phone', 'address']
+                        }
+                    ]
+                }],
+                order: [['created_at', 'ASC']]
+            });
+
+            const orders = deliveries.map((d) => {
+                const o = d.order.get({ plain: true });
+                o.delivery = {
+                    delivery_id: d.delivery_id,
+                    status: d.status,
+                    seller_delivery_agent_id: d.seller_delivery_agent_id,
+                    pickup_location: d.pickup_location,
+                    delivery_location: d.delivery_location
+                };
+                return o;
+            });
+
+            return sendSuccess(res, 200, 'Assigned orders retrieved', { orders });
+        }
+
         const agent_id = req.user.user_id;
 
         const orders = await Order.findAll({
@@ -996,7 +1073,7 @@ const getAgentAssignedOrders = async (req, res, next) => {
                 {
                     model: Delivery,
                     as: 'delivery',
-                    attributes: ['status', 'delivery_id']
+                    attributes: ['status', 'delivery_id', 'seller_delivery_agent_id', 'pickup_location', 'delivery_location']
                 }
             ],
             order: [['approved_at', 'ASC']]
@@ -1015,9 +1092,22 @@ const getAgentAssignedOrders = async (req, res, next) => {
 const acceptDelivery = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const agent_id = req.user.user_id;
+        const isSellerFleetAgent = Boolean(req.user.seller_id && req.user.agent_id);
 
-        const delivery = await Delivery.findOne({ where: { order_id: id, agent_id } });
+        let delivery;
+        if (isSellerFleetAgent) {
+            delivery = await Delivery.findOne({
+                where: {
+                    order_id: id,
+                    seller_delivery_agent_id: req.user.agent_id,
+                    status: 'Pending'
+                }
+            });
+        } else {
+            delivery = await Delivery.findOne({
+                where: { order_id: id, agent_id: req.user.user_id, status: 'Pending' }
+            });
+        }
 
         if (!delivery) {
             return sendError(res, 404, 'Delivery assignment not found');
@@ -1028,6 +1118,26 @@ const acceptDelivery = async (req, res, next) => {
         }
 
         await delivery.update({ status: 'Assigned' });
+
+        const order = await Order.findByPk(id);
+        if (!order) {
+            return sendError(res, 404, 'Order not found');
+        }
+
+        const updates = { order_status: 'Assigned' };
+        if (order.payment_status === 'Paid' && !order.qr_code_hash) {
+            const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
+            const { otp, otpHash, expiresAt } = generateDeliveryOTP();
+            Object.assign(updates, {
+                qr_code: qrCode,
+                qr_code_hash: qrCodeHash,
+                delivery_otp_hash: otpHash,
+                delivery_otp_expires_at: expiresAt,
+                approved_at: order.approved_at || new Date()
+            });
+            console.log(`[accept-delivery] Order ${id} QR/OTP generated. Dev OTP: ${otp}`);
+        }
+        await order.update(updates);
 
         return sendSuccess(res, 200, 'Delivery assignment accepted', {
             order_id: id,
@@ -1045,9 +1155,18 @@ const acceptDelivery = async (req, res, next) => {
 const rejectDelivery = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const agent_id = req.user.user_id;
+        const isSellerFleetAgent = Boolean(req.user.seller_id && req.user.agent_id);
 
-        const delivery = await Delivery.findOne({ where: { order_id: id, agent_id } });
+        let delivery;
+        if (isSellerFleetAgent) {
+            delivery = await Delivery.findOne({
+                where: { order_id: id, seller_delivery_agent_id: req.user.agent_id, status: 'Pending' }
+            });
+        } else {
+            delivery = await Delivery.findOne({
+                where: { order_id: id, agent_id: req.user.user_id, status: 'Pending' }
+            });
+        }
 
         if (!delivery) {
             return sendError(res, 404, 'Delivery assignment not found');
@@ -1057,13 +1176,23 @@ const rejectDelivery = async (req, res, next) => {
             return sendError(res, 400, `Cannot reject delivery in ${delivery.status} state`);
         }
 
-        // Update delivery status to Cancelled
-        await delivery.update({ status: 'Cancelled' });
+        await delivery.update({
+            status: 'Cancelled',
+            seller_delivery_agent_id: null,
+            seller_assigned_by: null
+        });
 
-        // Revert order status and clear agent
+        const order = await Order.findByPk(id);
+        const revertStatus =
+            order && order.payment_status === 'Paid'
+                ? 'Paid'
+                : order && order.order_status === 'Approved'
+                    ? 'Approved'
+                    : 'Placed';
+
         await Order.update(
-            { 
-                order_status: 'Approved',
+            {
+                order_status: revertStatus,
                 assigned_agent_id: null
             },
             { where: { order_id: id } }
