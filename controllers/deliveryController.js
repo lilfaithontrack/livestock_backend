@@ -1086,6 +1086,60 @@ const getAgentAssignedOrders = async (req, res, next) => {
 };
 
 /**
+ * Completed deliveries for the logged-in agent only (platform or seller fleet).
+ * GET /api/v1/deliveries/agent/orders/history
+ */
+const getAgentDeliveryHistory = async (req, res, next) => {
+    try {
+        const isSellerFleetAgent = Boolean(req.user.seller_id && req.user.agent_id);
+
+        const where = {
+            status: 'Delivered'
+        };
+
+        if (isSellerFleetAgent) {
+            where.seller_delivery_agent_id = req.user.agent_id;
+        } else {
+            where.agent_id = req.user.user_id;
+        }
+
+        const deliveries = await Delivery.findAll({
+            where,
+            include: [
+                {
+                    model: Order,
+                    as: 'order',
+                    attributes: [
+                        'order_id',
+                        'total_amount',
+                        'order_status',
+                        'shipping_address',
+                        'shipping_phone',
+                        'created_at'
+                    ],
+                    include: [
+                        {
+                            model: User,
+                            as: 'buyer',
+                            attributes: ['user_id', 'phone', 'email', 'address']
+                        }
+                    ]
+                }
+            ],
+            order: [
+                ['delivery_confirmed_at', 'DESC'],
+                ['actual_delivery_time', 'DESC'],
+                ['updated_at', 'DESC']
+            ]
+        });
+
+        return sendSuccess(res, 200, 'Delivery history retrieved', { deliveries });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Agent accepts delivery assignment
  * POST /api/v1/agent/orders/:id/accept
  */
@@ -1228,6 +1282,7 @@ module.exports = {
     resendDeliveryOTP,
     updateAgentLocation,
     getAgentAssignedOrders,
+    getAgentDeliveryHistory,
     acceptDelivery,
     rejectDelivery
 };

@@ -26,6 +26,9 @@ router.get('/admin/agents/nearby', verifyToken, requireRole(['Admin']), delivery
 // Get agent's assigned orders
 router.get('/agent/orders/assigned', verifyToken, requireRole(['Agent']), deliveryController.getAgentAssignedOrders);
 
+// Completed deliveries for this agent only (not global GET /deliveries)
+router.get('/agent/orders/history', verifyToken, requireRole(['Agent']), deliveryController.getAgentDeliveryHistory);
+
 // Agent accepts delivery assignment
 router.post('/agent/orders/:id/accept', verifyToken, requireRole(['Agent']), deliveryController.acceptDelivery);
 
@@ -65,8 +68,8 @@ router.post('/orders/:id/resend-otp', verifyToken, deliveryController.resendDeli
 
 // ============ GENERIC ROUTES (wildcard /:id MUST come last) ============
 
-// Admin routes - Get all deliveries
-router.get('/', verifyToken, deliveryController.getAllDeliveries);
+// Admin — list all deliveries (agents use /agent/orders/history)
+router.get('/', verifyToken, requireRole(['Admin']), deliveryController.getAllDeliveries);
 
 // Get delivery by ID
 router.get('/:id', verifyToken, deliveryController.getDeliveryById);
