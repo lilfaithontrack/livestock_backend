@@ -28,7 +28,7 @@ app.use((req, res, next) => {
 // Middleware
 const allowedProductionOrigins = [
       'https://shegergebeya.com',
-    'https://admin.shegergebeya.com',
+    'https://admin.shegergebeya.com','http://localhost:5173'
 ];
 
 app.use(cors({
