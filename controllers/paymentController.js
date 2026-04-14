@@ -4,6 +4,7 @@ const chapaService = require('../services/chapaService');
 const telebirrService = require('../services/telebirrService');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
+const { ensureDeliveryCodesForOrderId } = require('../utils/orderDeliveryVerification');
 
 /**
  * Initialize a payment with selected gateway
@@ -166,6 +167,7 @@ const verifyPayment = async (req, res, next) => {
                     { payment_status: 'Paid' },
                     { where: { order_id: payment.order_id } }
                 );
+                await ensureDeliveryCodesForOrderId(payment.order_id);
             }
         } else if (verificationResult.status === 'failed') {
             await payment.update({
@@ -240,6 +242,7 @@ const chapaWebhook = async (req, res) => {
                     { payment_status: 'Paid' },
                     { where: { order_id: payment.order_id } }
                 );
+                await ensureDeliveryCodesForOrderId(payment.order_id);
             }
         } else if (verificationResult.status === 'failed' || status === 'failed') {
             await payment.update({
@@ -304,6 +307,7 @@ const telebirrWebhook = async (req, res) => {
                     { payment_status: 'Paid' },
                     { where: { order_id: payment.order_id } }
                 );
+                await ensureDeliveryCodesForOrderId(payment.order_id);
             }
         } else if (result.status === 'failed') {
             await payment.update({
@@ -582,6 +586,9 @@ const updatePaymentStatus = async (req, res, next) => {
                 { payment_status: orderPaymentStatus },
                 { where: { order_id: payment.order_id } }
             );
+            if (orderPaymentStatus === 'Paid') {
+                await ensureDeliveryCodesForOrderId(payment.order_id);
+            }
         }
 
         return sendSuccess(res, 200, 'Payment status updated successfully', { payment });

@@ -9,6 +9,7 @@ const {
     deductStock
 } = require('../utils/stockHelpers');
 const { compressImage } = require('../middleware/uploadMiddleware');
+const { ensureDeliveryCodesOnOrderInstance } = require('../utils/orderDeliveryVerification');
 
 /**
  * Create order (checkout)
@@ -389,6 +390,9 @@ const updateOrderStatus = async (req, res, next) => {
                     console.error('Failed to create earning for seller:', sellerId, err);
                 }
             }
+
+            // Buyer handover QR + OTP for delivery verification once payment is confirmed
+            ensureDeliveryCodesOnOrderInstance(order);
         }
 
         // Handle order cancellation
