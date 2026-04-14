@@ -6,6 +6,14 @@ const { calculateDistance, findNearbyAgents } = require('../utils/geocoding');
 const { Op } = require('sequelize');
 const { createAgentEarning } = require('./agentEarningsController');
 
+const QR_BLOCKED_ORDER_STATUSES = new Set(['Delivered', 'Completed']);
+const QR_BLOCKED_PAYMENT_STATUSES = new Set(['Pending', 'Unpaid']);
+
+const canAccessBuyerVerificationCode = (order) => {
+    return !QR_BLOCKED_ORDER_STATUSES.has(order.order_status)
+        && !QR_BLOCKED_PAYMENT_STATUSES.has(order.payment_status);
+};
+
 /**
  * Assign delivery to agent (Admin only)
  * POST /api/v1/admin/deliveries/assign
@@ -892,8 +900,22 @@ const getOrderQRCode = async (req, res, next) => {
             return sendError(res, 403, 'You can only view QR code for your own orders');
         }
 
+        if (!canAccessBuyerVerificationCode(order)) {
+            return sendError(res, 400, 'QR code is only available for active paid orders');
+        }
+
         if (!order.qr_code) {
-            return sendError(res, 400, 'QR code not yet generated. Order must be approved first.');
+            const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
+            const { otp, otpHash, expiresAt } = generateDeliveryOTP();
+
+            await order.update({
+                qr_code: qrCode,
+                qr_code_hash: qrCodeHash,
+                delivery_otp_hash: otpHash,
+                delivery_otp_expires_at: expiresAt
+            });
+
+            console.log(`[order-qr] Generated missing QR/OTP for order ${order.order_id}. OTP: ${otp}`);
         }
 
         // Return QR data that can be rendered as QR code on client
@@ -932,7 +954,7 @@ const resendDeliveryOTP = async (req, res, next) => {
             return sendError(res, 403, 'You can only request OTP for your own orders or deliveries');
         }
 
-        if (!['Approved', 'Assigned', 'In_Transit'].includes(order.order_status)) {
+        if (!canAccessBuyerVerificationCode(order)) {
             return sendError(res, 400, 'Cannot resend OTP for this order status');
         }
 
