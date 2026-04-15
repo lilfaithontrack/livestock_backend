@@ -815,6 +815,9 @@ const verifyDelivery = async (req, res, next) => {
                 return sendError(res, 400, 'QR code is required');
             }
 
+            const legacyDirectCode = `RECEIVE_ORDER:${order.order_id}`;
+            const isLegacyDirectMatch = normalizedCode === legacyDirectCode || normalizedCode === order.order_id;
+
             // Backward compatibility: some legacy paid orders have qr_code but missing hash.
             // Rebuild hash from stored qr_code once, then continue normal verification.
             if (!order.qr_code_hash && order.qr_code) {
@@ -824,16 +827,21 @@ const verifyDelivery = async (req, res, next) => {
             }
 
             if (!order.qr_code_hash) {
-                return sendError(res, 400, 'Order verification QR is not ready yet. Ask buyer to refresh QR page.');
+                if (isLegacyDirectMatch) {
+                    isValid = true;
+                } else {
+                    return sendError(res, 400, 'Order verification QR is not ready yet. Ask buyer to refresh QR page.');
+                }
             }
 
-            isValid = verifyQRCode(normalizedCode, order.qr_code_hash);
+            if (!isValid) {
+                isValid = verifyQRCode(normalizedCode, order.qr_code_hash);
+            }
 
             // Backward compatibility for older web QR payloads that encoded order id directly.
             // Keep this fallback only after strict hash verification fails.
             if (!isValid) {
-                const legacyDirectCode = `RECEIVE_ORDER:${order.order_id}`;
-                if (normalizedCode === legacyDirectCode || normalizedCode === order.order_id) {
+                if (isLegacyDirectMatch) {
                     isValid = true;
                 }
             }
