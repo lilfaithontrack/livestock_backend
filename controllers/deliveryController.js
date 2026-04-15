@@ -830,7 +830,20 @@ const verifyDelivery = async (req, res, next) => {
                 if (isLegacyDirectMatch) {
                     isValid = true;
                 } else {
-                    return sendError(res, 400, 'Order verification QR is not ready yet. Ask buyer to refresh QR page.');
+                    // Last-resort compatibility: if old rows are missing qr_code/qr_code_hash entirely,
+                    // bootstrap from the first scanned QR payload so delivery can be completed.
+                    if (!order.qr_code && normalizedCode.length >= 6) {
+                        const bootstrapHash = crypto.createHash('sha256').update(normalizedCode).digest('hex');
+                        await order.update({
+                            qr_code: normalizedCode,
+                            qr_code_hash: bootstrapHash
+                        });
+                        order.qr_code = normalizedCode;
+                        order.qr_code_hash = bootstrapHash;
+                        isValid = true;
+                    } else {
+                        return sendError(res, 400, 'Order verification QR is not ready yet. Ask buyer to refresh QR page.');
+                    }
                 }
             }
 
