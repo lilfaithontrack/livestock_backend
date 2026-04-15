@@ -3,6 +3,7 @@ const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { generateOTP, hashOTP, verifyOTP, getOTPExpiration } = require('../utils/otpGenerator');
 const { generateOrderQR, verifyQRCode, generateDeliveryOTP, verifyDeliveryOTP } = require('../utils/qrGenerator');
 const { calculateDistance, findNearbyAgents } = require('../utils/geocoding');
+const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { createAgentEarning } = require('./agentEarningsController');
 
@@ -809,7 +810,24 @@ const verifyDelivery = async (req, res, next) => {
         let isValid = false;
 
         if (verification_type === 'qr') {
-            isValid = verifyQRCode(code, order.qr_code_hash);
+            const normalizedCode = String(code || '').trim();
+            if (!normalizedCode) {
+                return sendError(res, 400, 'QR code is required');
+            }
+
+            // Backward compatibility: some legacy paid orders have qr_code but missing hash.
+            // Rebuild hash from stored qr_code once, then continue normal verification.
+            if (!order.qr_code_hash && order.qr_code) {
+                const rebuiltHash = crypto.createHash('sha256').update(order.qr_code).digest('hex');
+                await order.update({ qr_code_hash: rebuiltHash });
+                order.qr_code_hash = rebuiltHash;
+            }
+
+            if (!order.qr_code_hash) {
+                return sendError(res, 400, 'Order verification QR is not ready yet. Ask buyer to refresh QR page.');
+            }
+
+            isValid = verifyQRCode(normalizedCode, order.qr_code_hash);
         } else if (verification_type === 'otp') {
             const result = verifyDeliveryOTP(code, order.delivery_otp_hash, order.delivery_otp_expires_at);
             if (result.expired) {
@@ -904,7 +922,7 @@ const getOrderQRCode = async (req, res, next) => {
             return sendError(res, 400, 'QR code is only available for active paid orders');
         }
 
-        if (!order.qr_code) {
+        if (!order.qr_code || !order.qr_code_hash) {
             const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
             const { otp, otpHash, expiresAt } = generateDeliveryOTP();
 
