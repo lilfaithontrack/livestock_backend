@@ -278,7 +278,7 @@ const getProducts = async (req, res, next) => {
                 {
                     model: ProductSubcategory,
                     as: 'subcategory',
-                    attributes: ['sub_cat_id', 'name', 'slug'],
+                    attributes: ['sub_cat_id', 'cat_id', 'name', 'slug'],
                     ...(category && {
                         where: { cat_id: category }
                     }),
@@ -649,7 +649,7 @@ const getSellerProducts = async (req, res, next) => {
                 {
                     model: ProductSubcategory,
                     as: 'subcategory',
-                    attributes: ['sub_cat_id', 'name', 'slug'],
+                    attributes: ['sub_cat_id', 'cat_id', 'name', 'slug'],
                     include: [
                         {
                             model: ProductCategory,
