@@ -828,6 +828,15 @@ const verifyDelivery = async (req, res, next) => {
             }
 
             isValid = verifyQRCode(normalizedCode, order.qr_code_hash);
+
+            // Backward compatibility for older web QR payloads that encoded order id directly.
+            // Keep this fallback only after strict hash verification fails.
+            if (!isValid) {
+                const legacyDirectCode = `RECEIVE_ORDER:${order.order_id}`;
+                if (normalizedCode === legacyDirectCode || normalizedCode === order.order_id) {
+                    isValid = true;
+                }
+            }
         } else if (verification_type === 'otp') {
             const result = verifyDeliveryOTP(code, order.delivery_otp_hash, order.delivery_otp_expires_at);
             if (result.expired) {
@@ -837,7 +846,7 @@ const verifyDelivery = async (req, res, next) => {
         }
 
         if (!isValid) {
-            return sendError(res, 401, 'Invalid verification code');
+            return sendError(res, 400, 'Invalid verification code');
         }
 
         await order.update({
