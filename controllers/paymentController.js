@@ -1,10 +1,14 @@
-const { Payment, Order, User } = require('../models');
+const { Payment, Order, User, OrderGroup } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const chapaService = require('../services/chapaService');
 const telebirrService = require('../services/telebirrService');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
-const { ensureDeliveryCodesForOrderId } = require('../utils/orderDeliveryVerification');
+const {
+    ensureDeliveryCodesForOrderId,
+    markGroupOrdersPaid,
+    markGroupOrdersFailed
+} = require('../utils/orderDeliveryVerification');
 
 /**
  * Initialize a payment with selected gateway
@@ -14,6 +18,7 @@ const initializePayment = async (req, res, next) => {
     try {
         const {
             order_id,
+            group_id,
             payment_method, // 'chapa' or 'telebirr'
             amount,
             email,
@@ -31,12 +36,23 @@ const initializePayment = async (req, res, next) => {
             return sendError(res, 400, 'Valid amount is required');
         }
 
-        // Validate order if provided
+        // Validate order group or single order
         let order = null;
-        if (order_id) {
+        let orderGroup = null;
+
+        if (group_id) {
+            orderGroup = await OrderGroup.findByPk(group_id);
+            if (!orderGroup) {
+                return sendError(res, 404, 'Order group not found');
+            }
+        } else if (order_id) {
             order = await Order.findByPk(order_id);
             if (!order) {
                 return sendError(res, 404, 'Order not found');
+            }
+            // Check if this order belongs to a group — use group for payment
+            if (order.group_id) {
+                orderGroup = await OrderGroup.findByPk(order.group_id);
             }
         }
 
@@ -83,6 +99,7 @@ const initializePayment = async (req, res, next) => {
         // Create payment record
         const payment = await Payment.create({
             order_id: order_id || null,
+            group_id: orderGroup ? orderGroup.group_id : null,
             transaction_ref: tx_ref,
             payment_method,
             gateway_used: payment_method,
@@ -97,8 +114,14 @@ const initializePayment = async (req, res, next) => {
             }
         });
 
-        // Update order payment status if applicable
-        if (order) {
+        // Update payment status on group/order
+        if (orderGroup) {
+            await orderGroup.update({ payment_status: 'Pending' });
+            await Order.update(
+                { payment_status: 'Pending' },
+                { where: { group_id: orderGroup.group_id } }
+            );
+        } else if (order) {
             await order.update({ payment_status: 'Pending' });
         }
 
@@ -161,8 +184,14 @@ const verifyPayment = async (req, res, next) => {
                 }
             });
 
-            // Update order if linked
-            if (payment.order_id) {
+            // Update orders — group or single
+            if (payment.group_id) {
+                await OrderGroup.update(
+                    { payment_status: 'Paid' },
+                    { where: { group_id: payment.group_id } }
+                );
+                await markGroupOrdersPaid(payment.group_id);
+            } else if (payment.order_id) {
                 await Order.update(
                     { payment_status: 'Paid' },
                     { where: { order_id: payment.order_id } }
@@ -178,7 +207,13 @@ const verifyPayment = async (req, res, next) => {
                 }
             });
 
-            if (payment.order_id) {
+            if (payment.group_id) {
+                await OrderGroup.update(
+                    { payment_status: 'Failed' },
+                    { where: { group_id: payment.group_id } }
+                );
+                await markGroupOrdersFailed(payment.group_id);
+            } else if (payment.order_id) {
                 await Order.update(
                     { payment_status: 'Failed' },
                     { where: { order_id: payment.order_id } }
@@ -237,7 +272,13 @@ const chapaWebhook = async (req, res) => {
                 }
             });
 
-            if (payment.order_id) {
+            if (payment.group_id) {
+                await OrderGroup.update(
+                    { payment_status: 'Paid' },
+                    { where: { group_id: payment.group_id } }
+                );
+                await markGroupOrdersPaid(payment.group_id);
+            } else if (payment.order_id) {
                 await Order.update(
                     { payment_status: 'Paid' },
                     { where: { order_id: payment.order_id } }
@@ -253,7 +294,13 @@ const chapaWebhook = async (req, res) => {
                 }
             });
 
-            if (payment.order_id) {
+            if (payment.group_id) {
+                await OrderGroup.update(
+                    { payment_status: 'Failed' },
+                    { where: { group_id: payment.group_id } }
+                );
+                await markGroupOrdersFailed(payment.group_id);
+            } else if (payment.order_id) {
                 await Order.update(
                     { payment_status: 'Failed' },
                     { where: { order_id: payment.order_id } }
@@ -302,7 +349,13 @@ const telebirrWebhook = async (req, res) => {
                 }
             });
 
-            if (payment.order_id) {
+            if (payment.group_id) {
+                await OrderGroup.update(
+                    { payment_status: 'Paid' },
+                    { where: { group_id: payment.group_id } }
+                );
+                await markGroupOrdersPaid(payment.group_id);
+            } else if (payment.order_id) {
                 await Order.update(
                     { payment_status: 'Paid' },
                     { where: { order_id: payment.order_id } }
@@ -318,7 +371,13 @@ const telebirrWebhook = async (req, res) => {
                 }
             });
 
-            if (payment.order_id) {
+            if (payment.group_id) {
+                await OrderGroup.update(
+                    { payment_status: 'Failed' },
+                    { where: { group_id: payment.group_id } }
+                );
+                await markGroupOrdersFailed(payment.group_id);
+            } else if (payment.order_id) {
                 await Order.update(
                     { payment_status: 'Failed' },
                     { where: { order_id: payment.order_id } }
@@ -575,13 +634,28 @@ const updatePaymentStatus = async (req, res, next) => {
 
         await payment.update(updateData);
 
-        // Update order payment status if linked
-        if (payment.order_id) {
-            let orderPaymentStatus = 'Pending';
-            if (status === 'success') orderPaymentStatus = 'Paid';
-            else if (status === 'failed') orderPaymentStatus = 'Failed';
-            else if (status === 'refunded') orderPaymentStatus = 'Refunded';
+        // Update order/group payment status if linked
+        let orderPaymentStatus = 'Pending';
+        if (status === 'success') orderPaymentStatus = 'Paid';
+        else if (status === 'failed') orderPaymentStatus = 'Failed';
+        else if (status === 'refunded') orderPaymentStatus = 'Refunded';
 
+        if (payment.group_id) {
+            await OrderGroup.update(
+                { payment_status: orderPaymentStatus },
+                { where: { group_id: payment.group_id } }
+            );
+            if (orderPaymentStatus === 'Paid') {
+                await markGroupOrdersPaid(payment.group_id);
+            } else if (orderPaymentStatus === 'Failed') {
+                await markGroupOrdersFailed(payment.group_id);
+            } else {
+                await Order.update(
+                    { payment_status: orderPaymentStatus },
+                    { where: { group_id: payment.group_id } }
+                );
+            }
+        } else if (payment.order_id) {
             await Order.update(
                 { payment_status: orderPaymentStatus },
                 { where: { order_id: payment.order_id } }

@@ -613,14 +613,22 @@ const sellerSelfDeliver = async (req, res, next) => {
         const { id } = req.params;
         const seller_id = req.user.user_id;
 
-        const order = await Order.findByPk(id, {
-            include: [{
-                model: OrderItem,
-                as: 'items',
-                where: { seller_id },
-                required: true
-            }]
+        // Check direct seller_id first (split-order architecture), fall back to OrderItem join (legacy)
+        let order = await Order.findOne({
+            where: { order_id: id, seller_id }
         });
+
+        if (!order) {
+            // Legacy fallback: seller owns items within a consolidated order
+            order = await Order.findByPk(id, {
+                include: [{
+                    model: OrderItem,
+                    as: 'items',
+                    where: { seller_id },
+                    required: true
+                }]
+            });
+        }
 
         if (!order) {
             return sendError(res, 404, 'Order not found or you are not the seller');

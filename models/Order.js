@@ -7,6 +7,24 @@ const Order = sequelize.define('orders', {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
     },
+    group_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'order_groups',
+            key: 'group_id'
+        },
+        comment: 'Links sub-order to its checkout group (nullable for legacy orders)'
+    },
+    seller_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'users',
+            key: 'user_id'
+        },
+        comment: 'The single seller this sub-order belongs to (nullable for legacy orders)'
+    },
     buyer_id: {
         type: DataTypes.UUID,
         allowNull: false,

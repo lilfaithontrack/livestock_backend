@@ -15,6 +15,15 @@ const Payment = sequelize.define('payments', {
             key: 'order_id'
         }
     },
+    group_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'order_groups',
+            key: 'group_id'
+        },
+        comment: 'Links payment to order group (for multi-seller checkout)'
+    },
     seller_payout_id: {
         type: DataTypes.UUID,
         allowNull: true,

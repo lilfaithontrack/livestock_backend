@@ -30,6 +30,7 @@ const RentalCategory = require('./RentalCategory');
 const Rental = require('./Rental');
 const SellerSettings = require('./SellerSettings');
 const SellerDeliveryAgent = require('./SellerDeliveryAgent');
+const OrderGroup = require('./OrderGroup');
 
 // Define Associations
 
@@ -68,7 +69,15 @@ Product.hasMany(OrderItem, { foreignKey: 'product_id', as: 'order_items' });
 Product.hasMany(QerchaPackage, { foreignKey: 'ox_product_id', as: 'qercha_packages' });
 Product.hasMany(StockMovement, { foreignKey: 'product_id', as: 'stockMovements' });
 
+// OrderGroup Associations
+OrderGroup.belongsTo(User, { foreignKey: 'buyer_id', as: 'buyer' });
+OrderGroup.hasMany(Order, { foreignKey: 'group_id', as: 'orders' });
+OrderGroup.hasMany(Payment, { foreignKey: 'group_id', as: 'payments' });
+User.hasMany(OrderGroup, { foreignKey: 'buyer_id', as: 'order_groups' });
+
 // Order Associations
+Order.belongsTo(OrderGroup, { foreignKey: 'group_id', as: 'order_group' });
+Order.belongsTo(User, { foreignKey: 'seller_id', as: 'order_seller' });
 Order.belongsTo(User, { foreignKey: 'buyer_id', as: 'buyer' });
 Order.belongsTo(User, { foreignKey: 'assigned_agent_id', as: 'assigned_agent' });
 Order.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
@@ -83,6 +92,7 @@ OrderItem.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });
 
 // Payment Associations
 Payment.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+Payment.belongsTo(OrderGroup, { foreignKey: 'group_id', as: 'order_group' });
 Payment.belongsTo(SellerPayout, { foreignKey: 'seller_payout_id', as: 'seller_payout' });
 
 // Delivery Associations
@@ -194,7 +204,8 @@ const db = {
     RentalCategory,
     Rental,
     SellerSettings,
-    SellerDeliveryAgent
+    SellerDeliveryAgent,
+    OrderGroup
 };
 
 module.exports = db;

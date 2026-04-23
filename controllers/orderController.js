@@ -1,5 +1,5 @@
 const {
-    Order, OrderItem, Product, User, QerchaPackage, QerchaParticipant, Delivery
+    Order, OrderItem, Product, User, QerchaPackage, QerchaParticipant, Delivery, OrderGroup
 } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const sequelize = require('../config/database');
@@ -15,6 +15,7 @@ const { ensureDeliveryCodesOnOrderInstance } = require('../utils/orderDeliveryVe
  * Create order (checkout)
  * POST /api/v1/orders/checkout
  * Supports mixed items: Standard Products and Qercha Packages
+ * Splits items by seller — creates an OrderGroup + one Order per seller.
  */
 const createOrder = async (req, res, next) => {
     const transaction = await sequelize.transaction();
@@ -40,17 +41,29 @@ const createOrder = async (req, res, next) => {
             return sendError(res, 400, 'Order must contain at least one item');
         }
 
-        let total_amount = 0;
-        const orderItemsToCreate = [];
-        const qerchaParticipantsToCreate = [];
-        const qerchaPackagesToUpdate = [];
+        let grandTotal = 0;
+        // Collect validated items grouped by seller_id
+        // Key: seller_id, Value: { orderItems: [], qerchaParticipants: [], qerchaPackageUpdates: [], subtotal: 0 }
+        const sellerBuckets = {};
+        let hasQercha = false;
 
-        // Validate stock and calculate total
+        const ensureBucket = (sellerId) => {
+            if (!sellerBuckets[sellerId]) {
+                sellerBuckets[sellerId] = {
+                    orderItems: [],
+                    qerchaParticipants: [],
+                    qerchaPackageUpdates: [],
+                    subtotal: 0
+                };
+            }
+        };
+
+        // Validate stock and calculate totals
         for (const item of items) {
-            const itemType = item.type || 'product'; // Default to product if not specified
+            const itemType = item.type || 'product';
 
             if (itemType === 'qercha') {
-                // Handle Qercha Item
+                hasQercha = true;
                 if (!item.package_id) {
                     await transaction.rollback();
                     return sendError(res, 400, 'Package ID is required for Qercha items');
@@ -76,37 +89,36 @@ const createOrder = async (req, res, next) => {
                     return sendError(res, 400, `Not enough shares available for package. Available: ${qerchaPackage.shares_available}`);
                 }
 
-                // Calculate price per share
                 const pricePerShare = parseFloat(qerchaPackage.product.price) / qerchaPackage.total_shares;
                 const itemTotal = pricePerShare * item.quantity;
-                total_amount += itemTotal;
+                grandTotal += itemTotal;
 
-                // Prepare Order Item (for history)
-                orderItemsToCreate.push({
-                    product_id: qerchaPackage.product.product_id, // Link to the Ox/Product
+                const sellerId = qerchaPackage.product.seller_id;
+                ensureBucket(sellerId);
+                sellerBuckets[sellerId].subtotal += itemTotal;
+
+                sellerBuckets[sellerId].orderItems.push({
+                    product_id: qerchaPackage.product.product_id,
                     quantity: item.quantity,
                     unit_price: pricePerShare,
-                    seller_id: qerchaPackage.product.seller_id
+                    seller_id: sellerId
                 });
 
-                // Prepare Qercha Participant
-                qerchaParticipantsToCreate.push({
+                sellerBuckets[sellerId].qerchaParticipants.push({
                     user_id: buyer_id,
                     package_id: qerchaPackage.package_id,
                     shares_bought: item.quantity,
-                    amount_paid: itemTotal, // Will be marked as paid when order is paid? Or Pending now.
+                    amount_paid: itemTotal,
                     payment_status: 'Pending',
                     joined_at: new Date()
                 });
 
-                // Prepare Package Update (deduct shares)
-                qerchaPackagesToUpdate.push({
+                sellerBuckets[sellerId].qerchaPackageUpdates.push({
                     package: qerchaPackage,
                     shares_deducted: item.quantity
                 });
 
             } else {
-                // Handle Standard Product
                 const product = await Product.findByPk(item.product_id, { transaction });
 
                 if (!product) {
@@ -119,7 +131,6 @@ const createOrder = async (req, res, next) => {
                     return sendError(res, 400, `Product ${product.name} is not available`);
                 }
 
-                // Check stock availability
                 const stockCheck = await checkStockAvailability(item.product_id, item.quantity);
                 if (!stockCheck.available) {
                     await transaction.rollback();
@@ -127,16 +138,19 @@ const createOrder = async (req, res, next) => {
                 }
 
                 const itemTotal = parseFloat(product.price) * item.quantity;
-                total_amount += itemTotal;
+                grandTotal += itemTotal;
 
-                orderItemsToCreate.push({
+                const sellerId = product.seller_id;
+                ensureBucket(sellerId);
+                sellerBuckets[sellerId].subtotal += itemTotal;
+
+                sellerBuckets[sellerId].orderItems.push({
                     product_id: product.product_id,
                     quantity: item.quantity,
                     unit_price: product.price,
                     seller_id: product.seller_id
                 });
 
-                // Reserve stock for this item
                 if (product.enable_stock_management) {
                     await reserveStock(
                         product.product_id,
@@ -149,64 +163,87 @@ const createOrder = async (req, res, next) => {
             }
         }
 
-        // Create order
-        const order = await Order.create({
+        // --- Create OrderGroup ---
+        const orderGroup = await OrderGroup.create({
             buyer_id,
-            total_amount,
+            total_amount: grandTotal,
             payment_status: 'Pending',
-            order_status: 'Placed',
             shipping_address,
             shipping_full_name,
             shipping_phone,
             shipping_city,
             shipping_region,
-            shipping_notes
+            shipping_notes,
+            order_type: hasQercha ? 'qercha' : 'regular'
         }, { transaction });
 
-        // Create order items
-        for (const item of orderItemsToCreate) {
-            await OrderItem.create({
-                order_id: order.order_id,
-                ...item
+        // --- Create one Order per seller ---
+        const createdOrders = [];
+
+        for (const [sellerId, bucket] of Object.entries(sellerBuckets)) {
+            const order = await Order.create({
+                group_id: orderGroup.group_id,
+                seller_id: sellerId,
+                buyer_id,
+                total_amount: bucket.subtotal,
+                payment_status: 'Pending',
+                order_status: 'Placed',
+                shipping_address,
+                shipping_full_name,
+                shipping_phone,
+                shipping_city,
+                shipping_region,
+                shipping_notes,
+                order_type: bucket.qerchaParticipants.length > 0 ? 'qercha' : 'regular'
             }, { transaction });
-        }
 
-        // Create Qercha Participants
-        for (const participant of qerchaParticipantsToCreate) {
-            await QerchaParticipant.create({
-                ...participant,
-                order_id: order.order_id
-            }, { transaction });
-        }
-
-        // Update Qercha Package Shares
-        for (const update of qerchaPackagesToUpdate) {
-            const pkg = update.package;
-            const newSharesAvailable = pkg.shares_available - update.shares_deducted;
-
-            let newStatus = pkg.status;
-            if (newSharesAvailable === 0) {
-                newStatus = 'Completed'; // Or whatever status means fully funded but not yet slaughtered
+            // Create order items for this seller's order
+            for (const oi of bucket.orderItems) {
+                await OrderItem.create({
+                    order_id: order.order_id,
+                    ...oi
+                }, { transaction });
             }
 
-            await pkg.update({
-                shares_available: newSharesAvailable,
-                status: newStatus
-            }, { transaction });
-        }
+            // Create Qercha Participants for this seller's order
+            for (const participant of bucket.qerchaParticipants) {
+                await QerchaParticipant.create({
+                    ...participant,
+                    order_id: order.order_id
+                }, { transaction });
+            }
 
-        // Update reserved stock with order ID (for standard products)
-        // Note: reserveStock was called with null orderId, we might need a way to update it or just rely on the order items. 
-        // The stockHelpers.reserveStock creates a StockMovement. Ideally we update that movement with the OrderID now.
-        // For simplicity in this refactor, we are skipping the strict linking of the reservation to the order ID in the stock movement if the helper doesn't return the movement ID.
-        // A better approach would be to have reserveStock return the ID, but for now we proceed.
+            // Update Qercha Package Shares
+            for (const update of bucket.qerchaPackageUpdates) {
+                const pkg = update.package;
+                const newSharesAvailable = pkg.shares_available - update.shares_deducted;
+                let newStatus = pkg.status;
+                if (newSharesAvailable === 0) {
+                    newStatus = 'Completed';
+                }
+                await pkg.update({
+                    shares_available: newSharesAvailable,
+                    status: newStatus
+                }, { transaction });
+            }
+
+            createdOrders.push({
+                order_id: order.order_id,
+                seller_id: sellerId,
+                subtotal: bucket.subtotal,
+                item_count: bucket.orderItems.length
+            });
+        }
 
         await transaction.commit();
 
+        console.log(`[OrderController] Group ${orderGroup.group_id} created with ${createdOrders.length} seller order(s)`);
+
         return sendSuccess(res, 201, 'Order created successfully', {
-            order_id: order.order_id,
-            total_amount: order.total_amount,
-            order_status: order.order_status
+            group_id: orderGroup.group_id,
+            orders: createdOrders,
+            total_amount: grandTotal,
+            order_count: createdOrders.length
         });
     } catch (error) {
         await transaction.rollback();
@@ -234,6 +271,11 @@ const getOrders = async (req, res, next) => {
                             as: 'product'
                         }
                     ]
+                },
+                {
+                    model: User,
+                    as: 'order_seller',
+                    attributes: ['user_id', 'email', 'phone', 'address']
                 }
             ],
             order: [['created_at', 'DESC']]
@@ -276,6 +318,11 @@ const getOrderById = async (req, res, next) => {
                     attributes: ['user_id', 'email', 'phone', 'address']
                 },
                 {
+                    model: User,
+                    as: 'order_seller',
+                    attributes: ['user_id', 'email', 'phone', 'address']
+                },
+                {
                     model: Delivery,
                     as: 'delivery',
                     attributes: ['delivery_id', 'status', 'agent_id', 'seller_delivery_agent_id', 'assignment_type', 'pickup_location', 'delivery_location', 'pickup_confirmed_at', 'delivery_confirmed_at']
@@ -288,6 +335,59 @@ const getOrderById = async (req, res, next) => {
         }
 
         return sendSuccess(res, 200, 'Order retrieved successfully', { order });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get all orders in an order group
+ * GET /api/v1/orders/group/:groupId
+ */
+const getOrdersByGroup = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const user_id = req.user.user_id;
+
+        const orderGroup = await OrderGroup.findByPk(groupId);
+        if (!orderGroup) {
+            return sendError(res, 404, 'Order group not found');
+        }
+
+        // Only the buyer or admin can view group
+        if (orderGroup.buyer_id !== user_id && req.user.role !== 'Admin') {
+            return sendError(res, 403, 'Unauthorized to view this order group');
+        }
+
+        const orders = await Order.findAll({
+            where: { group_id: groupId },
+            include: [
+                {
+                    model: OrderItem,
+                    as: 'items',
+                    include: [{ model: Product, as: 'product' }]
+                },
+                {
+                    model: User,
+                    as: 'order_seller',
+                    attributes: ['user_id', 'email', 'phone', 'address']
+                },
+                {
+                    model: Delivery,
+                    as: 'delivery',
+                    attributes: ['delivery_id', 'status', 'agent_id', 'seller_delivery_agent_id', 'assignment_type']
+                }
+            ],
+            order: [['created_at', 'ASC']]
+        });
+
+        return sendSuccess(res, 200, 'Order group retrieved successfully', {
+            group_id: orderGroup.group_id,
+            total_amount: orderGroup.total_amount,
+            payment_status: orderGroup.payment_status,
+            shipping_address: orderGroup.shipping_address,
+            orders
+        });
     } catch (error) {
         next(error);
     }
@@ -357,37 +457,50 @@ const updateOrderStatus = async (req, res, next) => {
                 await p.save({ transaction });
             }
 
-            // 3. Create Seller Earnings
+            // 3. Create Seller Earnings — each order is now per-seller
             const earningsController = require('./earningsController');
-            const sellerTotals = {};
 
-            // A) standard order items
-            if (order.items && order.items.length > 0) {
-                for (const item of order.items) {
-                    if (item.seller_id) {
-                        const itemTotal = parseFloat(item.unit_price) * parseInt(item.quantity);
-                        sellerTotals[item.seller_id] = (sellerTotals[item.seller_id] || 0) + itemTotal;
-                    }
-                }
-            }
-
-            // B) Qercha participants
-            if (participants && participants.length > 0) {
-                for (const p of participants) {
-                    const pkg = await QerchaPackage.findByPk(p.package_id, { transaction });
-                    if (pkg && pkg.host_user_id) {
-                        const amount = parseFloat(p.amount_paid);
-                        sellerTotals[pkg.host_user_id] = (sellerTotals[pkg.host_user_id] || 0) + amount;
-                    }
-                }
-            }
-
-            // Generate earnings records
-            for (const sellerId in sellerTotals) {
+            if (order.seller_id) {
+                // New split-order: seller_id is on the order itself
                 try {
-                    await earningsController.createEarning(order.order_id, sellerId, sellerTotals[sellerId], transaction);
+                    await earningsController.createEarning(
+                        order.order_id,
+                        order.seller_id,
+                        parseFloat(order.total_amount),
+                        transaction
+                    );
                 } catch (err) {
-                    console.error('Failed to create earning for seller:', sellerId, err);
+                    console.error('Failed to create earning for seller:', order.seller_id, err);
+                }
+            } else {
+                // Legacy order (no seller_id on order): group by seller from items
+                const sellerTotals = {};
+
+                if (order.items && order.items.length > 0) {
+                    for (const item of order.items) {
+                        if (item.seller_id) {
+                            const itemTotal = parseFloat(item.unit_price) * parseInt(item.quantity);
+                            sellerTotals[item.seller_id] = (sellerTotals[item.seller_id] || 0) + itemTotal;
+                        }
+                    }
+                }
+
+                if (participants && participants.length > 0) {
+                    for (const p of participants) {
+                        const pkg = await QerchaPackage.findByPk(p.package_id, { transaction });
+                        if (pkg && pkg.host_user_id) {
+                            const amount = parseFloat(p.amount_paid);
+                            sellerTotals[pkg.host_user_id] = (sellerTotals[pkg.host_user_id] || 0) + amount;
+                        }
+                    }
+                }
+
+                for (const sellerId in sellerTotals) {
+                    try {
+                        await earningsController.createEarning(order.order_id, sellerId, sellerTotals[sellerId], transaction);
+                    } catch (err) {
+                        console.error('Failed to create earning for seller:', sellerId, err);
+                    }
                 }
             }
 
@@ -465,7 +578,7 @@ const updateOrderStatus = async (req, res, next) => {
 };
 
 /**
- * Upload payment proof (screenshot)
+ * Upload payment proof (screenshot) — supports single order or order group
  * POST /api/v1/orders/:id/payment-proof
  */
 const uploadPaymentProof = async (req, res, next) => {
@@ -479,12 +592,10 @@ const uploadPaymentProof = async (req, res, next) => {
             return sendError(res, 404, 'Order not found');
         }
 
-        // Ensure buyer owns the order
         if (order.buyer_id !== buyer_id) {
             return sendError(res, 403, 'You can only upload payment proof for your own orders');
         }
 
-        // Check if payment proof already exists
         if (order.payment_proof_url) {
             return sendError(res, 400, 'Payment proof already uploaded. Contact support to update.');
         }
@@ -493,22 +604,72 @@ const uploadPaymentProof = async (req, res, next) => {
             return sendError(res, 400, 'Payment proof image is required');
         }
 
-        // Compress and store the image
         const compressedImageUrl = await compressImage(req.file.path, {
             width: 1200,
             height: 1200,
             quality: 85
         });
 
-        // Update order with payment proof URL
         order.payment_proof_url = compressedImageUrl;
-        order.payment_status = 'Pending'; // Awaiting verification
+        order.payment_status = 'Pending';
         await order.save();
 
         return sendSuccess(res, 200, 'Payment proof uploaded successfully', {
             order_id: order.order_id,
             payment_proof_url: order.payment_proof_url,
             payment_status: order.payment_status
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Upload payment proof for an entire order group
+ * POST /api/v1/orders/group/:groupId/payment-proof
+ */
+const uploadGroupPaymentProof = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const buyer_id = req.user.user_id;
+
+        const orderGroup = await OrderGroup.findByPk(groupId);
+        if (!orderGroup) {
+            return sendError(res, 404, 'Order group not found');
+        }
+
+        if (orderGroup.buyer_id !== buyer_id) {
+            return sendError(res, 403, 'You can only upload payment proof for your own orders');
+        }
+
+        if (orderGroup.payment_proof_url) {
+            return sendError(res, 400, 'Payment proof already uploaded. Contact support to update.');
+        }
+
+        if (!req.file) {
+            return sendError(res, 400, 'Payment proof image is required');
+        }
+
+        const compressedImageUrl = await compressImage(req.file.path, {
+            width: 1200,
+            height: 1200,
+            quality: 85
+        });
+
+        // Update group
+        orderGroup.payment_proof_url = compressedImageUrl;
+        await orderGroup.save();
+
+        // Also store on all sub-orders for backward compat
+        await Order.update(
+            { payment_proof_url: compressedImageUrl },
+            { where: { group_id: groupId } }
+        );
+
+        return sendSuccess(res, 200, 'Payment proof uploaded for order group', {
+            group_id: orderGroup.group_id,
+            payment_proof_url: compressedImageUrl,
+            payment_status: orderGroup.payment_status
         });
     } catch (error) {
         next(error);
@@ -523,14 +684,20 @@ const getSellerOrders = async (req, res, next) => {
     try {
         const seller_id = req.user.user_id;
 
-        // Get all orders that contain items with products from this seller
+        // New split orders have seller_id on Order; legacy orders need item-based filter
+        const { Op } = require('sequelize');
+
         const orders = await Order.findAll({
+            where: {
+                [Op.or]: [
+                    { seller_id },
+                    { '$items.seller_id$': seller_id }
+                ]
+            },
             include: [
                 {
                     model: OrderItem,
                     as: 'items',
-                    where: { seller_id },
-                    required: true,
                     include: [
                         {
                             model: Product,
@@ -549,7 +716,8 @@ const getSellerOrders = async (req, res, next) => {
                     attributes: ['delivery_id', 'status', 'agent_id', 'seller_delivery_agent_id', 'assignment_type']
                 }
             ],
-            order: [['created_at', 'DESC']]
+            order: [['created_at', 'DESC']],
+            subQuery: false
         });
 
         return sendSuccess(res, 200, 'Seller orders retrieved successfully', { orders });
@@ -563,6 +731,8 @@ module.exports = {
     getOrders,
     getSellerOrders,
     getOrderById,
+    getOrdersByGroup,
     updateOrderStatus,
-    uploadPaymentProof
+    uploadPaymentProof,
+    uploadGroupPaymentProof
 };

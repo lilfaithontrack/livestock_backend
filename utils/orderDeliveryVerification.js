@@ -42,8 +42,55 @@ async function ensureDeliveryCodesForOrderId(orderId) {
     console.log(`[order-qr] Generated QR/OTP for order ${order.order_id}. Dev OTP: ${otp}`);
 }
 
+/**
+ * Generate QR/OTP for ALL orders in an order group.
+ * Called after group payment is confirmed.
+ */
+async function ensureDeliveryCodesForGroup(groupId) {
+    if (!groupId) return;
+    const orders = await Order.findAll({ where: { group_id: groupId } });
+    for (const order of orders) {
+        if (!shouldGenerateDeliveryCodes(order)) continue;
+        const { qrCode, qrCodeHash } = generateOrderQR(order.order_id);
+        const { otp, otpHash, expiresAt } = generateDeliveryOTP();
+        await order.update({
+            qr_code: qrCode,
+            qr_code_hash: qrCodeHash,
+            delivery_otp_hash: otpHash,
+            delivery_otp_expires_at: expiresAt
+        });
+        console.log(`[order-qr] Generated QR/OTP for group order ${order.order_id}. Dev OTP: ${otp}`);
+    }
+}
+
+/**
+ * Mark all orders in a group as Paid and generate delivery codes.
+ */
+async function markGroupOrdersPaid(groupId) {
+    if (!groupId) return;
+    await Order.update(
+        { payment_status: 'Paid' },
+        { where: { group_id: groupId } }
+    );
+    await ensureDeliveryCodesForGroup(groupId);
+}
+
+/**
+ * Mark all orders in a group as Failed.
+ */
+async function markGroupOrdersFailed(groupId) {
+    if (!groupId) return;
+    await Order.update(
+        { payment_status: 'Failed' },
+        { where: { group_id: groupId } }
+    );
+}
+
 module.exports = {
     shouldGenerateDeliveryCodes,
     ensureDeliveryCodesOnOrderInstance,
-    ensureDeliveryCodesForOrderId
+    ensureDeliveryCodesForOrderId,
+    ensureDeliveryCodesForGroup,
+    markGroupOrdersPaid,
+    markGroupOrdersFailed
 };

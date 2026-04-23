@@ -25,19 +25,31 @@ const registerDelivery = async (req, res, next) => {
             return sendError(res, 400, 'Delivery type is required');
         }
 
-        // Verify order belongs to seller
-        const order = await Order.findByPk(orderId, {
+        // Verify order belongs to seller — check direct seller_id first (split-order), fall back to OrderItem join (legacy)
+        let order = await Order.findOne({
+            where: { order_id: orderId, seller_id },
             include: [{
-                model: OrderItem,
-                as: 'items',
-                where: { seller_id },
-                required: true
-            }, {
                 model: User,
                 as: 'buyer',
                 attributes: ['user_id', 'email', 'phone', 'address']
             }]
         });
+
+        if (!order) {
+            // Legacy fallback: check via OrderItem
+            order = await Order.findByPk(orderId, {
+                include: [{
+                    model: OrderItem,
+                    as: 'items',
+                    where: { seller_id },
+                    required: true
+                }, {
+                    model: User,
+                    as: 'buyer',
+                    attributes: ['user_id', 'email', 'phone', 'address']
+                }]
+            });
+        }
 
         if (!order) {
             return sendError(res, 404, 'Order not found or unauthorized');
@@ -178,17 +190,17 @@ const getSellerDeliveries = async (req, res, next) => {
         const seller_id = req.user.user_id;
         const { status } = req.query;
 
-        const whereClause = { seller_assigned_by: seller_id };
-        if (status) {
-            whereClause.status = status;
-        }
+        const deliveryWhere = status ? { status } : {};
 
         const deliveries = await Delivery.findAll({
-            where: whereClause,
+            where: deliveryWhere,
             include: [
                 {
                     model: Order,
                     as: 'order',
+                    // Scope to seller's own sub-orders (new architecture) OR seller-assigned deliveries (legacy)
+                    where: { seller_id },
+                    required: false,
                     include: [
                         {
                             model: User,
@@ -208,12 +220,19 @@ const getSellerDeliveries = async (req, res, next) => {
                     attributes: ['user_id', 'email', 'phone']
                 }
             ],
+            // Also include deliveries registered by this seller (legacy seller_assigned_by)
             order: [['created_at', 'DESC']]
         });
 
+        // Filter: keep deliveries where the order belongs to the seller OR was assigned by the seller
+        const filteredDeliveries = deliveries.filter(d =>
+            (d.order && d.order.seller_id === seller_id) ||
+            d.seller_assigned_by === seller_id
+        );
+
         return sendSuccess(res, 200, 'Deliveries retrieved successfully', { 
-            deliveries,
-            total: deliveries.length
+            deliveries: filteredDeliveries,
+            total: filteredDeliveries.length
         });
     } catch (error) {
         next(error);
@@ -234,13 +253,16 @@ const updateDeliveryAssignment = async (req, res, next) => {
             return sendError(res, 400, 'Agent ID is required');
         }
 
-        const delivery = await Delivery.findByPk(deliveryId);
+        const delivery = await Delivery.findByPk(deliveryId, {
+            include: [{ model: Order, as: 'order', attributes: ['seller_id'] }]
+        });
 
         if (!delivery) {
             return sendError(res, 404, 'Delivery not found');
         }
 
-        if (delivery.seller_assigned_by !== seller_id) {
+        const orderBelongsToSeller = delivery.order && delivery.order.seller_id === seller_id;
+        if (delivery.seller_assigned_by !== seller_id && !orderBelongsToSeller) {
             return sendError(res, 403, 'Unauthorized to modify this delivery');
         }
 
@@ -283,13 +305,16 @@ const cancelDelivery = async (req, res, next) => {
         const seller_id = req.user.user_id;
         const { reason } = req.body;
 
-        const delivery = await Delivery.findByPk(deliveryId);
+        const delivery = await Delivery.findByPk(deliveryId, {
+            include: [{ model: Order, as: 'order', attributes: ['seller_id'] }]
+        });
 
         if (!delivery) {
             return sendError(res, 404, 'Delivery not found');
         }
 
-        if (delivery.seller_assigned_by !== seller_id) {
+        const orderBelongsToSeller = delivery.order && delivery.order.seller_id === seller_id;
+        if (delivery.seller_assigned_by !== seller_id && !orderBelongsToSeller) {
             return sendError(res, 403, 'Unauthorized to cancel this delivery');
         }
 
@@ -362,7 +387,8 @@ const getDeliveryDetails = async (req, res, next) => {
             return sendError(res, 404, 'Delivery not found');
         }
 
-        if (delivery.seller_assigned_by !== seller_id) {
+        const orderBelongsToSeller = delivery.order && delivery.order.seller_id === seller_id;
+        if (delivery.seller_assigned_by !== seller_id && !orderBelongsToSeller) {
             return sendError(res, 403, 'Unauthorized to view this delivery');
         }
 

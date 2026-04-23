@@ -14,6 +14,12 @@ router.get('/', verifyToken, orderController.getOrders);
 // Get seller's orders (orders containing seller's products)
 router.get('/seller', verifyToken, requireRole(['Seller']), orderController.getSellerOrders);
 
+// Get all orders in a group
+router.get('/group/:groupId', verifyToken, orderController.getOrdersByGroup);
+
+// Upload payment proof for an order group
+router.post('/group/:groupId/payment-proof', verifyToken, requireRole(['Buyer', 'Seller']), upload.single('payment_proof'), orderController.uploadGroupPaymentProof);
+
 // Get order by ID
 router.get('/:id', verifyToken, orderController.getOrderById);
 
