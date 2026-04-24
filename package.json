@@ -9,7 +9,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:otp": "node scripts/test-otp-registration.js",
     "test:autolink": "node scripts/test-auto-link-otp.js",
-    "check:telegram": "node scripts/check-telegram-link.js"
+    "check:telegram": "node scripts/check-telegram-link.js",
+    "test:multi-seller": "node tests/multi-seller-order.test.js",
+    "verify:multi-seller": "node scripts/verify-multi-seller.js",
+    "apply:migration": "node scripts/apply-migration-sql.js"
   },
   "keywords": [
     "livestock",

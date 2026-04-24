@@ -134,6 +134,10 @@ const createProduct = async (req, res, next) => {
 
             // Location & Logistics
             location,
+            region,
+            city,
+            subcity,
+            woreda_kebele,
             latitude,
             longitude,
             shipping_available: shipping_available || false,
@@ -415,7 +419,8 @@ const updateProduct = async (req, res, next) => {
             genetic_traits, milk_production_liters_per_day,
             breeding_history, offspring_count,
             // Location & Logistics
-            location, latitude, longitude, shipping_available,
+            location, region, city, subcity, woreda_kebele,
+            latitude, longitude, shipping_available,
             delivery_timeframe_days, pickup_available,
             // Certifications & Compliance
             certificate_urls, license_numbers, organic_certified,
@@ -532,6 +537,10 @@ const updateProduct = async (req, res, next) => {
 
         // Location & Logistics
         if (location !== undefined) updates.location = location;
+        if (region !== undefined) updates.region = region;
+        if (city !== undefined) updates.city = city;
+        if (subcity !== undefined) updates.subcity = subcity;
+        if (woreda_kebele !== undefined) updates.woreda_kebele = woreda_kebele;
         if (latitude !== undefined) updates.latitude = latitude;
         if (longitude !== undefined) updates.longitude = longitude;
         if (shipping_available !== undefined) updates.shipping_available = shipping_available;

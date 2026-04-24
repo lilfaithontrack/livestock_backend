@@ -293,6 +293,27 @@ const Product = sequelize.define('products', {
         allowNull: true,
         comment: 'Text description of location'
     },
+    // Ethiopian structured location fields
+    region: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Ethiopia Region/City Administration (e.g., Addis Ababa, Oromia, Amhara)'
+    },
+    city: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'City or main administrative area'
+    },
+    subcity: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Subcity/Kifle Ketema (for Addis Ababa) or Zone/Administrative area'
+    },
+    woreda_kebele: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Woreda district or Kebele for precise location'
+    },
     latitude: {
         type: DataTypes.DECIMAL(10, 8),
         allowNull: true,

@@ -27,6 +27,7 @@ const agentEarningsRoutes = require('./agentEarningsRoutes');
 const rentalRoutes = require('./rentalRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const sellerRoutes = require('./sellerRoutes');
+const locationRoutes = require('./locationRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -54,6 +55,7 @@ router.use('/agent-earnings', agentEarningsRoutes);
 router.use('/rentals', rentalRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/seller', sellerRoutes);
+router.use('/locations', locationRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
