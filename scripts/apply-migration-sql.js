@@ -176,6 +176,50 @@ async function applyMigration() {
             log.warn('All delivery columns already exist');
         }
         
+        // Step 9: Add location columns to products table
+        const productLocationCols = [
+            { field: 'region',        sql: "ADD COLUMN region VARCHAR(100) NULL COMMENT 'Ethiopia Region'" },
+            { field: 'city',          sql: "ADD COLUMN city VARCHAR(100) NULL COMMENT 'City or admin area'" },
+            { field: 'subcity',       sql: "ADD COLUMN subcity VARCHAR(100) NULL COMMENT 'Subcity/Zone'" },
+            { field: 'woreda_kebele', sql: "ADD COLUMN woreda_kebele VARCHAR(100) NULL COMMENT 'Woreda or Kebele'" },
+        ];
+
+        log.info('Checking products location columns...');
+        let productsUpdated = false;
+        for (const col of productLocationCols) {
+            const [exists] = await connection.query(
+                `SHOW COLUMNS FROM products WHERE Field = '${col.field}'`
+            );
+            if (exists.length === 0) {
+                await connection.query(`ALTER TABLE products ${col.sql}`);
+                log.success(`products.${col.field} added`);
+                productsUpdated = true;
+            }
+        }
+        if (!productsUpdated) {
+            log.warn('All product location columns already exist');
+        }
+
+        // Add indexes for location queries (ignore if already exist)
+        const locationIndexes = [
+            { name: 'idx_products_region',   sql: "CREATE INDEX idx_products_region ON products(region)" },
+            { name: 'idx_products_city',     sql: "CREATE INDEX idx_products_city ON products(city)" },
+            { name: 'idx_products_subcity',  sql: "CREATE INDEX idx_products_subcity ON products(subcity)" },
+            { name: 'idx_products_location', sql: "CREATE INDEX idx_products_location ON products(region, city, subcity)" },
+        ];
+        for (const idx of locationIndexes) {
+            try {
+                await connection.query(idx.sql);
+                log.success(`Index ${idx.name} created`);
+            } catch (e) {
+                if (e.code === 'ER_DUP_KEYNAME') {
+                    log.warn(`Index ${idx.name} already exists`);
+                } else {
+                    throw e;
+                }
+            }
+        }
+
         console.log('\n========================================');
         log.success('Migration completed successfully!');
         console.log('========================================\n');
