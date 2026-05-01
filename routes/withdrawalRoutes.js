@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const withdrawalController = require('../controllers/withdrawalController');
 const { authenticate, authorize } = require('../middleware/auth');
+const uploadPaymentProof = require('../middleware/paymentProofUploadMiddleware');
 
 // All routes require authentication
 router.use(authenticate);
@@ -17,7 +18,7 @@ router.get('/pending', authorize('Admin'), withdrawalController.getPendingWithdr
 router.get('/stats', authorize('Admin'), withdrawalController.getWithdrawalStats);
 router.put('/:id/approve', authorize('Admin'), withdrawalController.approveWithdrawal);
 router.put('/:id/process', authorize('Admin'), withdrawalController.processWithdrawal);
-router.put('/:id/complete', authorize('Admin'), withdrawalController.completeWithdrawal);
+router.put('/:id/complete', authorize('Admin'), uploadPaymentProof.single('payment_proof'), withdrawalController.completeWithdrawal);
 router.put('/:id/reject', authorize('Admin'), withdrawalController.rejectWithdrawal);
 
 module.exports = router;

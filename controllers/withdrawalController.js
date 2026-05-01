@@ -309,6 +309,7 @@ exports.completeWithdrawal = async (req, res) => {
         const { id } = req.params;
         const { payment_proof_url, transaction_reference, notes } = req.body;
         const admin_id = req.user.user_id;
+        const uploadedProofUrl = req.file ? `/uploads/withdrawal-evidence/${req.file.filename}` : null;
 
         const withdrawal = await SellerPayout.findByPk(id);
 
@@ -320,6 +321,11 @@ exports.completeWithdrawal = async (req, res) => {
         if (!['Approved', 'Processing'].includes(withdrawal.status)) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Withdrawal must be approved or processing' });
+        }
+
+        if (!transaction_reference) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Transaction reference is required' });
         }
 
         // Mark earnings as withdrawn
@@ -352,7 +358,8 @@ exports.completeWithdrawal = async (req, res) => {
             status: 'Completed',
             processed_date: new Date(),
             processed_by: admin_id,
-            payment_proof_url,
+            payment_proof_url: payment_proof_url || uploadedProofUrl || withdrawal.payment_proof_url,
+            payment_proof_file_type: req.file?.mimetype || withdrawal.payment_proof_file_type,
             transaction_reference,
             notes: notes || withdrawal.notes
         }, { transaction });

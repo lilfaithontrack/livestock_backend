@@ -64,6 +64,11 @@ const SellerPayout = sequelize.define('seller_payouts', {
         allowNull: true,
         comment: 'Admin uploads proof of payment to seller'
     },
+    payment_proof_file_type: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'MIME type for uploaded payment proof (image/pdf)'
+    },
     transaction_reference: {
         type: DataTypes.STRING(100),
         allowNull: true,

@@ -33,7 +33,7 @@ const createProduct = async (req, res, next) => {
             genetic_traits, milk_production_liters_per_day,
             breeding_history, offspring_count,
             // Location & Logistics
-            location, latitude, longitude, shipping_available,
+            location, region, city, subcity, woreda_kebele, latitude, longitude, shipping_available,
             delivery_timeframe_days, pickup_available,
             // Certifications & Compliance
             certificate_urls, license_numbers, organic_certified,
@@ -208,6 +208,8 @@ const getProducts = async (req, res, next) => {
             featured,
             availability_status,
             location,
+            city,
+            subcity,
             sort = 'created_at',
             order = 'DESC'
         } = req.query;
@@ -217,11 +219,16 @@ const getProducts = async (req, res, next) => {
         // Build where clause
         const where = { status: 'Live' };
 
+        const { Op } = require('sequelize');
+
         if (search) {
-            where[require('sequelize').Op.or] = [
-                { name: { [require('sequelize').Op.like]: `%${search}%` } },
-                { '$subcategory.name$': { [require('sequelize').Op.like]: `%${search}%` } },
-                { '$subcategory.category.name$': { [require('sequelize').Op.like]: `%${search}%` } }
+            where[Op.or] = [
+                { name: { [Op.like]: `%${search}%` } },
+                { location: { [Op.like]: `%${search}%` } },
+                { city: { [Op.like]: `%${search}%` } },
+                { subcity: { [Op.like]: `%${search}%` } },
+                { '$subcategory.name$': { [Op.like]: `%${search}%` } },
+                { '$subcategory.category.name$': { [Op.like]: `%${search}%` } }
             ];
         }
 
@@ -232,17 +239,17 @@ const getProducts = async (req, res, next) => {
         if (product_type) {
             where.product_type = product_type;
         } else {
-            where.product_type = { [require('sequelize').Op.ne]: 'qercha' };
+            where.product_type = { [Op.ne]: 'qercha' };
         }
 
         if (min_price || max_price) {
             where.price = {};
-            if (min_price) where.price[require('sequelize').Op.gte] = parseFloat(min_price);
-            if (max_price) where.price[require('sequelize').Op.lte] = parseFloat(max_price);
+            if (min_price) where.price[Op.gte] = parseFloat(min_price);
+            if (max_price) where.price[Op.lte] = parseFloat(max_price);
         }
 
         if (breed) {
-            where.breed = { [require('sequelize').Op.like]: `%${breed}%` };
+            where.breed = { [Op.like]: `%${breed}%` };
         }
 
         if (gender) {
@@ -264,7 +271,15 @@ const getProducts = async (req, res, next) => {
         }
 
         if (location) {
-            where.location = { [require('sequelize').Op.like]: `%${location}%` };
+            where.location = { [Op.like]: `%${location}%` };
+        }
+
+        if (city) {
+            where.city = { [Op.like]: `%${city}%` };
+        }
+
+        if (subcity) {
+            where.subcity = { [Op.like]: `%${subcity}%` };
         }
 
 
@@ -712,7 +727,7 @@ const createProductWithQercha = async (req, res, next) => {
             genetic_traits, milk_production_liters_per_day,
             breeding_history, offspring_count,
             // Location & Logistics
-            location, latitude, longitude, shipping_available,
+            location, region, city, subcity, woreda_kebele, latitude, longitude, shipping_available,
             delivery_timeframe_days, pickup_available,
             // Certifications & Compliance
             certificate_urls, license_numbers, organic_certified,
