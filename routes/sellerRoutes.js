@@ -5,7 +5,8 @@ const requireRole = require('../middleware/roleMiddleware');
 const sellerSettingsController = require('../controllers/sellerSettingsController');
 const sellerDeliveryController = require('../controllers/sellerDeliveryController');
 const sellerDeliveryAgentController = require('../controllers/sellerDeliveryAgentController');
-const { SellerEarnings } = require('../models');
+const { Op } = require('sequelize');
+const { SellerEarnings, SellerPayout } = require('../models');
 
 // ============ SELLER EARNINGS ROUTE ============
 
@@ -26,6 +27,18 @@ router.get('/earnings', verifyToken, requireRole(['Seller']), async (req, res) =
             where: { seller_id, status: 'available' }
         }) || 0;
 
+        const pendingWithdrawalAmount = await SellerPayout.sum('amount', {
+            where: {
+                seller_id,
+                status: { [Op.in]: ['Pending', 'Approved', 'Processing'] }
+            }
+        }) || 0;
+
+        const netAvailableForWithdrawal = Math.max(
+            parseFloat(availableForWithdrawal) - parseFloat(pendingWithdrawalAmount),
+            0
+        );
+
         const totalWithdrawn = await SellerEarnings.sum('net_amount', {
             where: { seller_id, status: 'withdrawn' }
         }) || 0;
@@ -34,7 +47,8 @@ router.get('/earnings', verifyToken, requireRole(['Seller']), async (req, res) =
             earnings: {
                 total_earned: totalEarned,
                 pending_clearance: pendingClearance,
-                available_for_withdrawal: availableForWithdrawal,
+                available_for_withdrawal: netAvailableForWithdrawal,
+                pending_withdrawal_amount: pendingWithdrawalAmount,
                 total_withdrawn: totalWithdrawn
             }
         });
