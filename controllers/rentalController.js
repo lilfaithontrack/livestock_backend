@@ -2,6 +2,46 @@ const { Rental, RentalCategory, User } = require('../models');
 const { Op } = require('sequelize');
 const { compressMultipleImages } = require('../middleware/uploadMiddleware');
 
+const parseJsonObject = (value, fallback = {}) => {
+    if (!value) return fallback;
+    if (typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string') return fallback;
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+    } catch (error) {
+        return fallback;
+    }
+};
+
+const parseJsonArray = (value) => {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    if (typeof value !== 'string') return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        return [];
+    }
+};
+
+const buildLocationSummary = (rental) => {
+    const parts = [rental.location, rental.city, rental.region].filter(Boolean);
+    return parts.join(', ');
+};
+
+const normalizeRentalPayload = (rental) => {
+    const payload = rental.toJSON ? rental.toJSON() : { ...rental };
+    return {
+        ...payload,
+        image_urls: parseJsonArray(payload.image_urls),
+        video_urls: parseJsonArray(payload.video_urls),
+        specifications: parseJsonObject(payload.specifications, {}),
+        location_summary: buildLocationSummary(payload)
+    };
+};
+
 // Get all rental categories
 exports.getCategories = async (req, res) => {
     try {
@@ -64,7 +104,7 @@ exports.getRentals = async (req, res) => {
 
         res.json({
             success: true,
-            data: rows,
+            data: rows.map(normalizeRentalPayload),
             pagination: {
                 total: count,
                 page: parseInt(page),
@@ -86,7 +126,7 @@ exports.getRentalById = async (req, res) => {
         const rental = await Rental.findByPk(id, {
             include: [
                 { model: RentalCategory, as: 'category' },
-                { model: User, as: 'owner', attributes: ['user_id', 'email', 'phone'] }
+                { model: User, as: 'owner', attributes: ['user_id', 'email', 'phone', 'address'] }
             ]
         });
 
@@ -97,7 +137,7 @@ exports.getRentalById = async (req, res) => {
         // Increment view count
         await rental.increment('view_count');
 
-        res.json({ success: true, data: rental });
+        res.json({ success: true, data: normalizeRentalPayload(rental) });
     } catch (error) {
         console.error('Error fetching rental:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch rental' });
@@ -341,7 +381,7 @@ exports.getMyRentals = async (req, res) => {
 
         res.json({
             success: true,
-            data: rows,
+            data: rows.map(normalizeRentalPayload),
             pagination: {
                 total: count,
                 page: parseInt(page),
@@ -389,7 +429,7 @@ exports.adminGetRentals = async (req, res) => {
 
         res.json({
             success: true,
-            data: rows,
+            data: rows.map(normalizeRentalPayload),
             pagination: {
                 total: count,
                 page: parseInt(page),
