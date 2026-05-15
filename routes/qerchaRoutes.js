@@ -15,6 +15,9 @@ router.get('/packages', qerchaController.getPackages);
 // Get package details
 router.get('/packages/:id', qerchaController.getPackageDetails);
 
+// Host updates package (seller / admin)
+router.put('/packages/:id', verifyToken, qerchaController.updateSellerPackage);
+
 // Admin routes - Get all qercha packages
 router.get('/', qerchaController.getPackages);
 

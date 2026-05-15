@@ -8,7 +8,16 @@ const sequelize = require('../config/database');
  */
 const createPackage = async (req, res, next) => {
     try {
-        const { ox_product_id, total_shares, start_date, expiry_date, category } = req.body;
+        const {
+            ox_product_id,
+            total_shares,
+            start_date,
+            expiry_date,
+            category,
+            ethiopian_start_display,
+            ethiopian_expiry_display,
+            time_window_note
+        } = req.body;
         const host_user_id = req.user.user_id;
 
         if (!ox_product_id || !total_shares || total_shares < 2) {
@@ -33,7 +42,10 @@ const createPackage = async (req, res, next) => {
             status: 'Active',
             start_date: start_date || null,
             expiry_date: expiry_date || null,
-            category: category || null
+            category: category || null,
+            ethiopian_start_display: ethiopian_start_display || null,
+            ethiopian_expiry_display: ethiopian_expiry_display || null,
+            time_window_note: time_window_note || null
         });
 
         return sendSuccess(res, 201, 'Qercha package created successfully', {
@@ -321,6 +333,61 @@ const getPackageDetails = async (req, res, next) => {
  * Update Qercha package status (Admin)
  * PUT /api/v1/qercha/:id/status
  */
+/**
+ * Host seller updates own package (schedule / labels — not share inflation past sold)
+ * PUT /api/v1/qercha/packages/:id
+ */
+const updateSellerPackage = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const user_id = req.user.user_id;
+        const {
+            total_shares,
+            start_date,
+            expiry_date,
+            category,
+            ethiopian_start_display,
+            ethiopian_expiry_display,
+            time_window_note
+        } = req.body;
+
+        const pkg = await QerchaPackage.findByPk(id);
+        if (!pkg) {
+            return sendError(res, 404, 'Qercha package not found');
+        }
+        if (pkg.host_user_id !== user_id && req.user.role !== 'Admin') {
+            return sendError(res, 403, 'Only the package host can update this package');
+        }
+
+        const sold = pkg.total_shares - pkg.shares_available;
+        const updates = {};
+        if (category !== undefined) updates.category = category;
+        if (start_date !== undefined) updates.start_date = start_date || null;
+        if (expiry_date !== undefined) updates.expiry_date = expiry_date || null;
+        if (ethiopian_start_display !== undefined) updates.ethiopian_start_display = ethiopian_start_display || null;
+        if (ethiopian_expiry_display !== undefined) updates.ethiopian_expiry_display = ethiopian_expiry_display || null;
+        if (time_window_note !== undefined) updates.time_window_note = time_window_note || null;
+
+        if (total_shares !== undefined) {
+            const nextTotal = parseInt(total_shares, 10);
+            if (Number.isNaN(nextTotal) || nextTotal < 2) {
+                return sendError(res, 400, 'total_shares must be at least 2');
+            }
+            if (nextTotal < sold) {
+                return sendError(res, 400, `total_shares cannot be less than shares already sold (${sold})`);
+            }
+            updates.total_shares = nextTotal;
+            updates.shares_available = nextTotal - sold;
+        }
+
+        await pkg.update(updates);
+
+        return sendSuccess(res, 200, 'Qercha package updated', { package: pkg });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const updatePackageStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -353,5 +420,6 @@ module.exports = {
     joinPackage,
     getPackages,
     getPackageDetails,
+    updateSellerPackage,
     updatePackageStatus
 };

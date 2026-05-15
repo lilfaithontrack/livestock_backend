@@ -160,6 +160,11 @@ const Product = sequelize.define('products', {
         allowNull: true,
         comment: 'Color and markings description'
     },
+    color: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Primary color label (in addition to color_markings)'
+    },
     mother_id: {
         type: DataTypes.UUID,
         allowNull: true,

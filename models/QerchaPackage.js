@@ -51,6 +51,21 @@ const QerchaPackage = sequelize.define('qercha_packages', {
         type: DataTypes.STRING(100),
         allowNull: true,
         comment: 'Qercha-specific category (e.g. Cattle, Sheep, Goat, Camel)'
+    },
+    ethiopian_start_display: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        comment: 'Optional Ethiopian calendar label for start (e.g. መስከረም 5, 2017)'
+    },
+    ethiopian_expiry_display: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        comment: 'Optional Ethiopian calendar label for closing'
+    },
+    time_window_note: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Human-readable schedule note (local time window)'
     }
 });
 

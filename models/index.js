@@ -31,6 +31,7 @@ const Rental = require('./Rental');
 const SellerSettings = require('./SellerSettings');
 const SellerDeliveryAgent = require('./SellerDeliveryAgent');
 const OrderGroup = require('./OrderGroup');
+const ProductReview = require('./ProductReview');
 
 // Define Associations
 
@@ -68,6 +69,14 @@ Product.belongsTo(Product, { foreignKey: 'father_id', as: 'father' });
 Product.hasMany(OrderItem, { foreignKey: 'product_id', as: 'order_items' });
 Product.hasMany(QerchaPackage, { foreignKey: 'ox_product_id', as: 'qercha_packages' });
 Product.hasMany(StockMovement, { foreignKey: 'product_id', as: 'stockMovements' });
+Product.hasMany(ProductReview, { foreignKey: 'product_id', as: 'reviews' });
+
+ProductReview.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+ProductReview.belongsTo(User, { foreignKey: 'buyer_id', as: 'buyer' });
+ProductReview.belongsTo(User, { foreignKey: 'seller_id', as: 'seller' });
+ProductReview.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+User.hasMany(ProductReview, { foreignKey: 'buyer_id', as: 'reviews_written' });
+User.hasMany(ProductReview, { foreignKey: 'seller_id', as: 'reviews_received' });
 
 // OrderGroup Associations
 OrderGroup.belongsTo(User, { foreignKey: 'buyer_id', as: 'buyer' });
@@ -205,7 +214,8 @@ const db = {
     Rental,
     SellerSettings,
     SellerDeliveryAgent,
-    OrderGroup
+    OrderGroup,
+    ProductReview
 };
 
 module.exports = db;

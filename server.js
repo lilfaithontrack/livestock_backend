@@ -182,6 +182,13 @@ const initializeApp = async () => {
                     console.log(`✓ Migration: added ${m.col} to orders`);
                 }
             }
+            // --- product_subcategories: metadata_schema column ---
+            const [scCols] = await db.sequelize.query('SHOW COLUMNS FROM product_subcategories');
+            const scExisting = scCols.map(c => c.Field);
+            if (!scExisting.includes('metadata_schema')) {
+                await db.sequelize.query("ALTER TABLE product_subcategories ADD COLUMN metadata_schema JSON NULL COMMENT 'Dynamic product form field definitions'");
+                console.log('✓ Migration: added metadata_schema to product_subcategories');
+            }
         } catch (migrationErr) {
             console.warn('⚠ Auto-migration warning:', migrationErr.message);
         }

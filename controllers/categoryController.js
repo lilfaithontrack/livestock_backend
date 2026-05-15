@@ -1,6 +1,7 @@
 const { ProductCategory, ProductSubcategory, Product } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { compressImage, compressMultipleImages } = require('../middleware/uploadMiddleware');
+const { getSchemaBySlug } = require('../config/metadataSchemas');
 const path = require('path');
 const fs = require('fs');
 const { Op } = require('sequelize');
@@ -66,9 +67,19 @@ const getCategories = async (req, res, next) => {
             }));
         }
 
-        return sendSuccess(res, 200, 'Categories retrieved successfully', {
-            categories: include_stats === 'true' ? categoriesWithStats : categories
+        const plain = (include_stats === 'true' ? categoriesWithStats : categories).map(c => {
+            const obj = typeof c.toJSON === 'function' ? c.toJSON() : c;
+            if (obj.subcategories) {
+                obj.subcategories = obj.subcategories.map(s => {
+                    if (typeof s.metadata_schema === 'string') {
+                        try { s.metadata_schema = JSON.parse(s.metadata_schema); } catch (_) { s.metadata_schema = []; }
+                    }
+                    return s;
+                });
+            }
+            return obj;
         });
+        return sendSuccess(res, 200, 'Categories retrieved successfully', { categories: plain });
     } catch (error) {
         next(error);
     }
@@ -705,6 +716,82 @@ const reorderSubcategories = async (req, res, next) => {
     }
 };
 
+/**
+ * Update (save/replace) metadata_schema for a subcategory (Admin only)
+ * PUT /api/v1/categories/subcategories/:id/schema
+ * Body: { schema: [ { key, label, type, placeholder, required, options, group, suffix } ] }
+ */
+const updateSubcategorySchema = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { schema } = req.body;
+
+        if (!Array.isArray(schema)) {
+            return sendError(res, 400, 'schema must be an array of field definitions');
+        }
+
+        // Validate each field has at least key, label, type
+        for (const field of schema) {
+            if (!field.key || !field.label || !field.type) {
+                return sendError(res, 400, `Each field must have key, label, and type. Invalid field: ${JSON.stringify(field)}`);
+            }
+        }
+
+        const subcategory = await ProductSubcategory.findByPk(id);
+        if (!subcategory) {
+            return sendError(res, 404, 'Subcategory not found');
+        }
+
+        await subcategory.update({ metadata_schema: schema });
+
+        return sendSuccess(res, 200, 'Subcategory schema updated successfully', {
+            sub_cat_id: subcategory.sub_cat_id,
+            name: subcategory.name,
+            metadata_schema: subcategory.metadata_schema
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get metadata schema for a subcategory (form field definitions)
+ * GET /api/v1/categories/subcategories/:id/schema
+ */
+const getSubcategorySchema = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const subcategory = await ProductSubcategory.findByPk(id, {
+            include: [{ model: ProductCategory, as: 'category' }]
+        });
+
+        if (!subcategory) {
+            return sendError(res, 404, 'Subcategory not found');
+        }
+
+        // Priority: DB metadata_schema > config default by slug > empty
+        let schema = subcategory.metadata_schema;
+        if (!schema && subcategory.slug) {
+            schema = getSchemaBySlug(subcategory.slug);
+        }
+
+        // Ensure schema is a parsed array, not a raw JSON string
+        if (typeof schema === 'string') {
+            try { schema = JSON.parse(schema); } catch (_) { schema = []; }
+        }
+        return sendSuccess(res, 200, 'Schema retrieved successfully', {
+            sub_cat_id: subcategory.sub_cat_id,
+            name: subcategory.name,
+            slug: subcategory.slug,
+            category_name: subcategory.category?.name || null,
+            schema: Array.isArray(schema) ? schema : []
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     // Categories
     getCategories,
@@ -718,6 +805,8 @@ module.exports = {
     // Subcategories
     getSubcategories,
     getSubcategoryById,
+    getSubcategorySchema,
+    updateSubcategorySchema,
     createSubcategory,
     updateSubcategory,
     deleteSubcategory,

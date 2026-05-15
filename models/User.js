@@ -147,6 +147,18 @@ const User = sequelize.define('users', {
         type: DataTypes.STRING,
         allowNull: true,
         comment: 'Agent bank account number'
+    },
+    seller_rating_avg: {
+        type: DataTypes.DECIMAL(3, 2),
+        allowNull: true,
+        defaultValue: null,
+        comment: 'Average rating from product reviews (Hulubeje / listings)'
+    },
+    seller_rating_count: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        comment: 'Number of product reviews'
     }
 }, {
     hooks: {

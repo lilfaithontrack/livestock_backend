@@ -123,6 +123,11 @@ const formatProductResponse = (product) => {
     productData.is_available = isProductAvailable(productData);
     productData.is_in_stock = productData.stock_quantity > 0;
 
+    // Prefer explicit color field; fall back to markings text
+    if (!productData.color && productData.color_markings) {
+        productData.color = productData.color_markings;
+    }
+
     // Add Qercha flag
     productData.is_qercha = !!(productData.qercha_packages && productData.qercha_packages.length > 0);
 

@@ -49,6 +49,12 @@ const ProductSubcategory = sequelize.define('product_subcategories', {
         allowNull: true,
         defaultValue: {},
         comment: 'Additional subcategory-specific filter attributes'
+    },
+    metadata_schema: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: null,
+        comment: 'Defines dynamic product form fields for this subcategory. Array of field definitions: [{key, label, type, placeholder, required, options, group}]'
     }
 }, {
     timestamps: true,

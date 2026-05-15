@@ -25,7 +25,7 @@ const createProduct = async (req, res, next) => {
             stock_quantity, minimum_order_quantity,
             // Livestock Specific
             breed, age_months, date_of_birth, gender, weight_kg,
-            height_cm, color_markings, mother_id, father_id,
+            height_cm, color_markings, color, mother_id, father_id,
             // Health & Medical
             health_status, vaccination_records, medical_history,
             veterinary_certificates, last_health_checkup,
@@ -116,6 +116,7 @@ const createProduct = async (req, res, next) => {
             weight_kg,
             height_cm,
             color_markings,
+            color: color || null,
             mother_id,
             father_id,
 
@@ -224,6 +225,9 @@ const getProducts = async (req, res, next) => {
         if (search) {
             where[Op.or] = [
                 { name: { [Op.like]: `%${search}%` } },
+                { description: { [Op.like]: `%${search}%` } },
+                { breed: { [Op.like]: `%${search}%` } },
+                { product_type: { [Op.like]: `%${search}%` } },
                 { location: { [Op.like]: `%${search}%` } },
                 { city: { [Op.like]: `%${search}%` } },
                 { subcity: { [Op.like]: `%${search}%` } },
@@ -374,7 +378,6 @@ const getProductById = async (req, res, next) => {
                 {
                     model: QerchaPackage,
                     as: 'qercha_packages',
-                    where: { status: 'Active' },
                     required: false
                 }
             ]
@@ -426,7 +429,7 @@ const updateProduct = async (req, res, next) => {
             stock_quantity, minimum_order_quantity, availability_status,
             // Livestock Specific
             breed, age_months, date_of_birth, gender, weight_kg,
-            height_cm, color_markings,
+            height_cm, color_markings, color,
             // Health & Medical
             health_status, vaccination_records, medical_history,
             veterinary_certificates, last_health_checkup,
@@ -536,6 +539,7 @@ const updateProduct = async (req, res, next) => {
         if (weight_kg !== undefined) updates.weight_kg = weight_kg;
         if (height_cm !== undefined) updates.height_cm = height_cm;
         if (color_markings !== undefined) updates.color_markings = color_markings;
+        if (color !== undefined) updates.color = color;
 
         // Health & Medical
         if (health_status !== undefined) updates.health_status = health_status;
@@ -590,6 +594,44 @@ const updateProduct = async (req, res, next) => {
         }
 
         await product.update(updates);
+
+        let qerchaBody = req.body.qercha_package;
+        if (typeof qerchaBody === 'string') {
+            try {
+                qerchaBody = JSON.parse(qerchaBody);
+            } catch (_) {
+                qerchaBody = null;
+            }
+        }
+        if (qerchaBody && typeof qerchaBody === 'object') {
+            const pkg = await QerchaPackage.findOne({ where: { ox_product_id: id } });
+            if (pkg && (pkg.host_user_id === user_id || user_role === 'Admin')) {
+                const sold = pkg.total_shares - pkg.shares_available;
+                const qUpdates = {};
+                if (qerchaBody.category !== undefined) qUpdates.category = qerchaBody.category;
+                if (qerchaBody.start_date !== undefined) qUpdates.start_date = qerchaBody.start_date || null;
+                if (qerchaBody.expiry_date !== undefined) qUpdates.expiry_date = qerchaBody.expiry_date || null;
+                if (qerchaBody.ethiopian_start_display !== undefined) {
+                    qUpdates.ethiopian_start_display = qerchaBody.ethiopian_start_display || null;
+                }
+                if (qerchaBody.ethiopian_expiry_display !== undefined) {
+                    qUpdates.ethiopian_expiry_display = qerchaBody.ethiopian_expiry_display || null;
+                }
+                if (qerchaBody.time_window_note !== undefined) {
+                    qUpdates.time_window_note = qerchaBody.time_window_note || null;
+                }
+                if (qerchaBody.total_shares !== undefined) {
+                    const nextTotal = parseInt(qerchaBody.total_shares, 10);
+                    if (!Number.isNaN(nextTotal) && nextTotal >= 2 && nextTotal >= sold) {
+                        qUpdates.total_shares = nextTotal;
+                        qUpdates.shares_available = nextTotal - sold;
+                    }
+                }
+                if (Object.keys(qUpdates).length > 0) {
+                    await pkg.update(qUpdates);
+                }
+            }
+        }
 
         const message = user_role === 'Admin'
             ? 'Product updated successfully'
