@@ -292,6 +292,7 @@ const getProducts = async (req, res, next) => {
             where,
             limit: parseInt(limit),
             offset: parseInt(offset),
+            subQuery: false,
             include: [
                 {
                     model: User,
