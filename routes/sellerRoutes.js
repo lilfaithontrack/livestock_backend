@@ -58,6 +58,24 @@ router.get('/earnings', verifyToken, requireRole(['Seller']), async (req, res) =
     }
 });
 
+// Get seller earnings history rows (for chart)
+router.get('/earnings/history', verifyToken, requireRole(['Seller']), async (req, res) => {
+    try {
+        const seller_id = req.user.user_id;
+        const limit = parseInt(req.query.limit) || 500;
+        const earnings = await SellerEarnings.findAll({
+            where: { seller_id },
+            attributes: ['earning_id', 'net_amount', 'order_amount', 'status', 'created_at'],
+            order: [['created_at', 'ASC']],
+            limit,
+        });
+        res.json({ earnings });
+    } catch (error) {
+        console.error('Error fetching earnings history:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch earnings history' });
+    }
+});
+
 // ============ SELLER SETTINGS ROUTES ============
 
 // Get seller settings

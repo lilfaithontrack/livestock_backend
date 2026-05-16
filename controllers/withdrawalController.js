@@ -71,6 +71,18 @@ exports.requestWithdrawal = async (req, res) => {
             notes
         });
 
+        // Mark earnings rows as 'pending' so available_for_withdrawal drops immediately
+        let remaining = parseFloat(amount);
+        const earningsRows = await SellerEarnings.findAll({
+            where: { seller_id, status: 'available' },
+            order: [['available_date', 'ASC']]
+        });
+        for (const row of earningsRows) {
+            if (remaining <= 0) break;
+            await row.update({ status: 'pending', payout_id: payout.payout_id });
+            remaining -= parseFloat(row.net_amount);
+        }
+
         res.status(201).json({
             message: 'Withdrawal request submitted successfully',
             payout
@@ -404,6 +416,12 @@ exports.rejectWithdrawal = async (req, res) => {
             processed_by: admin_id,
             rejection_reason
         });
+
+        // Restore earnings rows back to 'available' so the seller can withdraw again
+        await SellerEarnings.update(
+            { status: 'available', payout_id: null },
+            { where: { payout_id: withdrawal.payout_id, seller_id: withdrawal.seller_id } }
+        );
 
         res.json({
             message: 'Withdrawal rejected',
