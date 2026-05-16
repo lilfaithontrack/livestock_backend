@@ -137,7 +137,13 @@ const createOrder = async (req, res, next) => {
                     return sendError(res, 400, `${product.name}: ${stockCheck.message}`);
                 }
 
-                const itemTotal = parseFloat(product.price) * item.quantity;
+                // Use discounted price if a discount is set
+                const rawPrice = parseFloat(product.price);
+                const discountPct = parseFloat(product.discount_percentage || 0);
+                const unitPrice = discountPct > 0
+                    ? parseFloat((rawPrice - (rawPrice * discountPct) / 100).toFixed(2))
+                    : rawPrice;
+                const itemTotal = unitPrice * item.quantity;
                 grandTotal += itemTotal;
 
                 const sellerId = product.seller_id;
@@ -147,7 +153,7 @@ const createOrder = async (req, res, next) => {
                 sellerBuckets[sellerId].orderItems.push({
                     product_id: product.product_id,
                     quantity: item.quantity,
-                    unit_price: product.price,
+                    unit_price: unitPrice,
                     seller_id: product.seller_id
                 });
 
