@@ -66,6 +66,9 @@ router.get('/orders/:id/qr-code', verifyToken, deliveryController.getOrderQRCode
 // Resend delivery OTP
 router.post('/orders/:id/resend-otp', verifyToken, deliveryController.resendDeliveryOTP);
 
+// Buyer rates a completed delivery / agent
+router.post('/:id/rate', verifyToken, deliveryController.rateDelivery);
+
 // ============ GENERIC ROUTES (wildcard /:id MUST come last) ============
 
 // Admin — list all deliveries (agents use /agent/orders/history)
