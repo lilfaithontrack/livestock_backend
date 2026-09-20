@@ -25,7 +25,7 @@ const createProduct = async (req, res, next) => {
             stock_quantity, minimum_order_quantity,
             // Livestock Specific
             breed, age_months, date_of_birth, gender, weight_kg,
-            height_cm, color_markings, color, mother_id, father_id,
+            height_cm, color_markings, color, brand, mother_id, father_id,
             // Health & Medical
             health_status, vaccination_records, medical_history,
             veterinary_certificates, last_health_checkup,
@@ -117,6 +117,7 @@ const createProduct = async (req, res, next) => {
             height_cm,
             color_markings,
             color: color || null,
+            brand: brand || null,
             mother_id,
             father_id,
 
@@ -430,7 +431,7 @@ const updateProduct = async (req, res, next) => {
             stock_quantity, minimum_order_quantity, availability_status,
             // Livestock Specific
             breed, age_months, date_of_birth, gender, weight_kg,
-            height_cm, color_markings, color,
+            height_cm, color_markings, color, brand,
             // Health & Medical
             health_status, vaccination_records, medical_history,
             veterinary_certificates, last_health_checkup,
@@ -541,6 +542,7 @@ const updateProduct = async (req, res, next) => {
         if (height_cm !== undefined) updates.height_cm = height_cm;
         if (color_markings !== undefined) updates.color_markings = color_markings;
         if (color !== undefined) updates.color = color;
+        if (brand !== undefined) updates.brand = brand;
 
         // Health & Medical
         if (health_status !== undefined) updates.health_status = health_status;
