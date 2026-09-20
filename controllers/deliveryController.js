@@ -1339,6 +1339,72 @@ const rejectDelivery = async (req, res, next) => {
     }
 };
 
+/**
+ * Buyer rates a completed delivery / delivery agent
+ * POST /api/v1/deliveries/:id/rate
+ */
+const rateDelivery = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { rating, feedback } = req.body;
+        const user_id = req.user.user_id;
+
+        const ratingNum = parseInt(rating, 10);
+        if (!ratingNum || ratingNum < 1 || ratingNum > 5) {
+            return sendError(res, 400, 'Rating must be an integer between 1 and 5');
+        }
+
+        const delivery = await Delivery.findByPk(id, {
+            include: [{ model: Order, as: 'order' }]
+        });
+
+        if (!delivery) {
+            return sendError(res, 404, 'Delivery not found');
+        }
+
+        if (!delivery.order || delivery.order.buyer_id !== user_id) {
+            return sendError(res, 403, 'You can only rate your own delivery');
+        }
+
+        if (delivery.status !== 'Delivered') {
+            return sendError(res, 400, 'Only completed (Delivered) deliveries can be rated');
+        }
+
+        if (delivery.delivery_rating !== null && delivery.delivery_rating !== undefined) {
+            return sendError(res, 400, 'This delivery has already been rated');
+        }
+
+        delivery.delivery_rating = ratingNum;
+        if (feedback !== undefined) {
+            delivery.delivery_feedback = feedback;
+        }
+        await delivery.save();
+
+        let agent = null;
+        if (delivery.agent_id) {
+            agent = await User.findByPk(delivery.agent_id);
+            if (agent) {
+                const prevCount = agent.agent_rating_count || 0;
+                const prevAvg = parseFloat(agent.agent_rating) || 0;
+                const newCount = prevCount + 1;
+                const newAvg = ((prevAvg * prevCount) + ratingNum) / newCount;
+                agent.agent_rating = newAvg.toFixed(2);
+                agent.agent_rating_count = newCount;
+                await agent.save();
+            }
+        }
+
+        return sendSuccess(res, 200, 'Delivery rated successfully', {
+            delivery_id: delivery.delivery_id,
+            delivery_rating: delivery.delivery_rating,
+            agent_rating: agent ? parseFloat(agent.agent_rating) : null,
+            agent_rating_count: agent ? agent.agent_rating_count : null
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     assignDelivery,
     getAgentDeliveries,
@@ -1362,5 +1428,6 @@ module.exports = {
     getAgentAssignedOrders,
     getAgentDeliveryHistory,
     acceptDelivery,
-    rejectDelivery
+    rejectDelivery,
+    rateDelivery
 };

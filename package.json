@@ -11,6 +11,9 @@
     "test:autolink": "node scripts/test-auto-link-otp.js",
     "check:telegram": "node scripts/check-telegram-link.js",
     "test:multi-seller": "node tests/multi-seller-order.test.js",
+    "test:delivery-rating": "node tests/delivery-rating.test.js",
+    "test:category-product-type": "node tests/category-product-type.test.js",
+    "test:qercha-moderation-shares": "node tests/qercha-moderation-shares.test.js",
     "verify:multi-seller": "node scripts/verify-multi-seller.js",
     "apply:migration": "node scripts/apply-migration-sql.js"
   },
