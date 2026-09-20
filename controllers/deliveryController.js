@@ -5,6 +5,7 @@ const { generateOrderQR, verifyQRCode, generateDeliveryOTP, verifyDeliveryOTP } 
 const { calculateDistance, findNearbyAgents } = require('../utils/geocoding');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 const { createAgentEarning } = require('./agentEarningsController');
 
 const QR_BLOCKED_ORDER_STATUSES = new Set(['Delivered', 'Completed']);
@@ -1339,6 +1340,75 @@ const rejectDelivery = async (req, res, next) => {
     }
 };
 
+/**
+ * Buyer rates a completed delivery / agent.
+ * POST /api/v1/deliveries/:id/rate
+ * Body: { rating: 1-5, feedback?: string }
+ * Mirrors refreshSellerRating in reviewController.js but rolls up onto the
+ * agent's User.agent_rating / agent_rating_count columns.
+ */
+const rateDelivery = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const buyer_id = req.user.user_id;
+        const { rating, feedback } = req.body;
+
+        const r = parseInt(rating, 10);
+        if (Number.isNaN(r) || r < 1 || r > 5) {
+            return sendError(res, 400, 'rating must be between 1 and 5');
+        }
+
+        const delivery = await Delivery.findByPk(id, {
+            include: [{ model: Order, as: 'order' }]
+        });
+
+        if (!delivery) {
+            return sendError(res, 404, 'Delivery not found');
+        }
+
+        if (!delivery.order || delivery.order.buyer_id !== buyer_id) {
+            return sendError(res, 404, 'Delivery not found');
+        }
+
+        if (delivery.status !== 'Delivered') {
+            return sendError(res, 400, 'You can only rate a delivery after it is completed');
+        }
+
+        if (!delivery.agent_id) {
+            return sendError(res, 400, 'This delivery has no assigned agent to rate');
+        }
+
+        if (delivery.delivery_rating != null) {
+            return sendError(res, 400, 'You already rated this delivery');
+        }
+
+        delivery.delivery_rating = r;
+        if (feedback !== undefined) delivery.delivery_feedback = feedback || null;
+        await delivery.save();
+
+        // Recalculate the agent's rating rollup across all their rated deliveries
+        const agg = await Delivery.findOne({
+            where: { agent_id: delivery.agent_id, delivery_rating: { [Op.ne]: null } },
+            attributes: [
+                [sequelize.fn('AVG', sequelize.col('delivery_rating')), 'avg'],
+                [sequelize.fn('COUNT', sequelize.col('delivery_id')), 'cnt']
+            ],
+            raw: true
+        });
+        const avg = agg?.avg != null ? parseFloat(Number(agg.avg).toFixed(2)) : r;
+        const cnt = agg?.cnt != null ? parseInt(agg.cnt, 10) : 1;
+
+        await User.update(
+            { agent_rating: avg, agent_rating_count: cnt },
+            { where: { user_id: delivery.agent_id } }
+        );
+
+        return sendSuccess(res, 200, 'Delivery rated successfully', { delivery });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     assignDelivery,
     getAgentDeliveries,
@@ -1362,5 +1432,6 @@ module.exports = {
     getAgentAssignedOrders,
     getAgentDeliveryHistory,
     acceptDelivery,
-    rejectDelivery
+    rejectDelivery,
+    rateDelivery
 };
