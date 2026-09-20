@@ -24,9 +24,10 @@ const QerchaParticipant = sequelize.define('qercha_participants', {
         }
     },
     shares_purchased: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.DECIMAL(4, 2),
         allowNull: false,
-        defaultValue: 1
+        defaultValue: 1,
+        comment: 'Supports fractional shares (e.g. 0.25, 0.5)'
     },
     amount_paid: {
         type: DataTypes.DECIMAL(10, 2),
