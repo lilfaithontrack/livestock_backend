@@ -8,6 +8,7 @@ const {
     incrementViewCount,
     calculateProductAge
 } = require('../utils/productHelpers');
+const { createProductWithQerchaTransaction } = require('../utils/qerchaHelpers');
 const path = require('path');
 const fs = require('fs');
 
@@ -25,7 +26,7 @@ const createProduct = async (req, res, next) => {
             stock_quantity, minimum_order_quantity,
             // Livestock Specific
             breed, age_months, date_of_birth, gender, weight_kg,
-            height_cm, color_markings, color, mother_id, father_id,
+            height_cm, color_markings, color, brand, mother_id, father_id,
             // Health & Medical
             health_status, vaccination_records, medical_history,
             veterinary_certificates, last_health_checkup,
@@ -117,6 +118,7 @@ const createProduct = async (req, res, next) => {
             height_cm,
             color_markings,
             color: color || null,
+            brand: brand || null,
             mother_id,
             father_id,
 
@@ -430,7 +432,7 @@ const updateProduct = async (req, res, next) => {
             stock_quantity, minimum_order_quantity, availability_status,
             // Livestock Specific
             breed, age_months, date_of_birth, gender, weight_kg,
-            height_cm, color_markings, color,
+            height_cm, color_markings, color, brand,
             // Health & Medical
             health_status, vaccination_records, medical_history,
             veterinary_certificates, last_health_checkup,
@@ -541,6 +543,7 @@ const updateProduct = async (req, res, next) => {
         if (height_cm !== undefined) updates.height_cm = height_cm;
         if (color_markings !== undefined) updates.color_markings = color_markings;
         if (color !== undefined) updates.color = color;
+        if (brand !== undefined) updates.brand = brand;
 
         // Health & Medical
         if (health_status !== undefined) updates.health_status = health_status;
@@ -754,41 +757,7 @@ const createProductWithQercha = async (req, res, next) => {
     const transaction = await sequelize.transaction();
 
     try {
-        const {
-            // Basic Information
-            name, description, product_type, sub_cat_id,
-            // Pricing & Inventory
-            price, deleted_price, discount_percentage, currency,
-            stock_quantity, minimum_order_quantity,
-            // Livestock Specific
-            breed, age_months, date_of_birth, gender, weight_kg,
-            height_cm, color_markings, mother_id, father_id,
-            // Health & Medical
-            health_status, vaccination_records, medical_history,
-            veterinary_certificates, last_health_checkup,
-            // Genetics & Performance
-            genetic_traits, milk_production_liters_per_day,
-            breeding_history, offspring_count,
-            // Location & Logistics
-            location, region, city, subcity, woreda_kebele, latitude, longitude, shipping_available,
-            delivery_timeframe_days, pickup_available,
-            // Certifications & Compliance
-            certificate_urls, license_numbers, organic_certified,
-            // Marketplace Features
-            featured, tags,
-            // Media
-            video_urls, youtube_video_url, social_media_links,
-            // Metadata
-            metadata,
-            // Admin-only: seller_id
-            seller_id: provided_seller_id,
-            // Qercha fields
-            create_qercha,
-            total_shares,
-            start_date,
-            expiry_date
-        } = req.body;
-
+        const { seller_id: provided_seller_id } = req.body;
         const user_id = req.user.user_id;
 
         // Determine seller_id: Admin can specify, or use their own
@@ -799,97 +768,16 @@ const createProductWithQercha = async (req, res, next) => {
             return sendError(res, 400, 'Specified seller does not exist');
         }
 
-        // Handle uploaded images with compression
-        let image_urls = [];
-        if (req.files && req.files.length > 0) {
-            image_urls = await compressMultipleImages(req.files, {
-                width: 1200,
-                height: 1200,
-                quality: 85
-            });
-        }
-
-        // Generate unique SKU
-        const sku = generateProductSKU('LVS');
-
-        // Calculate age from date_of_birth if not provided
-        const calculatedAge = age_months || (date_of_birth ? calculateProductAge(date_of_birth) : null);
-
-        // Create product with Live status (admin-created = auto-approved)
-        const product = await Product.create({
+        const { product, qerchaPackage } = await createProductWithQerchaTransaction({
+            body: req.body,
+            files: req.files,
             seller_id,
-            sub_cat_id,
-            sku,
-            name,
-            description,
-            product_type: product_type || 'livestock',
-            price,
-            deleted_price,
-            discount_percentage: discount_percentage || 0,
-            currency: currency || 'ETB',
-            stock_quantity: stock_quantity || 1,
-            minimum_order_quantity: minimum_order_quantity || 1,
-            breed,
-            age_months: calculatedAge,
-            date_of_birth,
-            gender,
-            weight_kg,
-            height_cm,
-            color_markings,
-            mother_id,
-            father_id,
-            health_status: health_status || 'unknown',
-            vaccination_records: vaccination_records ? JSON.parse(vaccination_records) : [],
-            medical_history,
-            veterinary_certificates: veterinary_certificates ? JSON.parse(veterinary_certificates) : [],
-            last_health_checkup,
-            genetic_traits,
-            milk_production_liters_per_day,
-            breeding_history,
-            offspring_count: offspring_count || 0,
-            location,
-            latitude,
-            longitude,
-            shipping_available: shipping_available || false,
-            delivery_timeframe_days,
-            pickup_available: pickup_available !== undefined ? pickup_available : true,
-            certificate_urls: certificate_urls ? JSON.parse(certificate_urls) : [],
-            license_numbers: license_numbers ? JSON.parse(license_numbers) : [],
-            organic_certified: organic_certified || false,
-            image_urls,
-            video_urls: video_urls ? JSON.parse(video_urls) : [],
-            youtube_video_url,
-            social_media_links: social_media_links ? (typeof social_media_links === 'string' ? JSON.parse(social_media_links) : social_media_links) : {},
-            featured: featured || false,
-            tags: tags ? JSON.parse(tags) : [],
-            metadata: metadata ? JSON.parse(metadata) : {},
-            // Auto-approve for admin with qercha (must be Live for qercha)
-            status: 'Live',
-            availability_status: 'available'
-        }, { transaction });
-
-        let qerchaPackage = null;
-
-        // Create Qercha package if requested
-        const shouldCreateQercha = create_qercha === 'true' || create_qercha === true;
-        if (shouldCreateQercha) {
-            const sharesCount = parseInt(total_shares) || 4;
-
-            if (sharesCount < 2) {
-                await transaction.rollback();
-                return sendError(res, 400, 'Qercha package requires at least 2 shares');
-            }
-
-            qerchaPackage = await QerchaPackage.create({
-                ox_product_id: product.product_id,
-                total_shares: sharesCount,
-                shares_available: sharesCount,
-                host_user_id: user_id,
-                status: 'Active',
-                start_date: start_date || null,
-                expiry_date: expiry_date || null
-            }, { transaction });
-        }
+            host_user_id: user_id,
+            productStatus: 'Live', // Admin-created = auto-approved product
+            autoApproveQercha: true, // Admin-created qercha packages are auto-approved
+            approved_by: user_id,
+            transaction
+        });
 
         await transaction.commit();
 

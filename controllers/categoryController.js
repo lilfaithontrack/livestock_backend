@@ -1,4 +1,4 @@
-const { ProductCategory, ProductSubcategory, Product } = require('../models');
+const { ProductCategory, ProductSubcategory, Product, ProductType } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { compressImage, compressMultipleImages } = require('../middleware/uploadMiddleware');
 const { getSchemaBySlug } = require('../config/metadataSchemas');
@@ -135,10 +135,19 @@ const getCategoryById = async (req, res, next) => {
  */
 const createCategory = async (req, res, next) => {
     try {
-        const { name, description, slug, icon_url, display_order, is_active, metadata } = req.body;
+        const { name, description, slug, icon_url, display_order, is_active, metadata, product_type_id } = req.body;
 
         if (!name) {
             return sendError(res, 400, 'Category name is required');
+        }
+
+        if (!product_type_id) {
+            return sendError(res, 400, 'Product type is required');
+        }
+
+        const productType = await ProductType.findByPk(product_type_id);
+        if (!productType) {
+            return sendError(res, 404, 'Product type not found');
         }
 
         // Handle uploaded images (multiple support)
@@ -202,7 +211,8 @@ const createCategory = async (req, res, next) => {
             icon_url,
             display_order: display_order || 0,
             is_active: is_active !== undefined ? is_active : true,
-            metadata: metadata ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) : {}
+            metadata: metadata ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) : {},
+            product_type_id
         });
 
         return sendSuccess(res, 201, 'Category created successfully', { category });
@@ -232,12 +242,22 @@ const createCategory = async (req, res, next) => {
 const updateCategory = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { name, description, slug, icon_url, display_order, is_active, metadata } = req.body;
+        const { name, description, slug, icon_url, display_order, is_active, metadata, product_type_id } = req.body;
 
         const category = await ProductCategory.findByPk(id);
 
         if (!category) {
             return sendError(res, 404, 'Category not found');
+        }
+
+        if (product_type_id !== undefined) {
+            if (!product_type_id) {
+                return sendError(res, 400, 'Product type is required');
+            }
+            const productType = await ProductType.findByPk(product_type_id);
+            if (!productType) {
+                return sendError(res, 404, 'Product type not found');
+            }
         }
 
         // Handle uploaded images
@@ -287,7 +307,8 @@ const updateCategory = async (req, res, next) => {
             icon_url: icon_url !== undefined ? icon_url : category.icon_url,
             display_order: display_order !== undefined ? display_order : category.display_order,
             is_active: is_active !== undefined ? is_active : category.is_active,
-            metadata: metadata ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) : category.metadata
+            metadata: metadata ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) : category.metadata,
+            product_type_id: product_type_id !== undefined ? product_type_id : category.product_type_id
         });
 
         return sendSuccess(res, 200, 'Category updated successfully', { category });
