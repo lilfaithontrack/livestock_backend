@@ -356,7 +356,7 @@ const getProductById = async (req, res, next) => {
                 {
                     model: User,
                     as: 'seller',
-                    attributes: ['user_id', 'phone', 'email', 'address']
+                    attributes: ['user_id', 'full_name', 'phone', 'email', 'address']
                 },
                 {
                     model: ProductSubcategory,

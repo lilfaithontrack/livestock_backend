@@ -9,9 +9,14 @@ const User = sequelize.define('users', {
         primaryKey: true
     },
     role: {
-        type: DataTypes.ENUM('Admin', 'Seller', 'Buyer', 'Agent'),
+        type: DataTypes.ENUM('Admin', 'Seller', 'Buyer', 'Agent', 'Staff'),
         allowNull: false,
         defaultValue: 'Buyer'
+    },
+    full_name: {
+        type: DataTypes.STRING(150),
+        allowNull: true,
+        comment: 'User display name. Stored separately from address to avoid the legacy name-in-address corruption.'
     },
     email: {
         type: DataTypes.STRING,
@@ -32,7 +37,18 @@ const User = sequelize.define('users', {
     },
     address: {
         type: DataTypes.TEXT,
-        allowNull: true
+        allowNull: true,
+        comment: 'Street address line only. Name/city/region are stored in their own columns.'
+    },
+    city: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'City or subcity for the default address'
+    },
+    region: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Region/state for the default address'
     },
     kyc_status: {
         type: DataTypes.BOOLEAN,
@@ -159,6 +175,34 @@ const User = sequelize.define('users', {
         allowNull: false,
         defaultValue: 0,
         comment: 'Number of product reviews'
+    },
+    staff_role_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'FK to staff_roles — assigned when an Admin/Staff user has a defined panel role'
+    },
+    permissions: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+        comment: 'Per-user permission overrides (merged with the staff role permissions)'
+    },
+    is_active: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        comment: 'Soft-disable flag. Inactive users cannot log in.'
+    },
+    last_login_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Timestamp of the most recent login'
+    },
+    preferred_language: {
+        type: DataTypes.STRING(10),
+        allowNull: false,
+        defaultValue: 'en',
+        comment: 'User UI language code (en, am, ...)'
     }
 }, {
     hooks: {

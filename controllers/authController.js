@@ -14,7 +14,7 @@ const otpStore = new Map();
  */
 const register = async (req, res, next) => {
     try {
-        const { role, email, phone, password, address } = req.body;
+        const { role, email, phone, password, address, full_name, city, region } = req.body;
 
         if (!role || !['Buyer', 'Seller', 'Agent'].includes(role)) {
             return sendError(res, 400, 'Valid role is required (Buyer, Seller, Agent)');
@@ -33,7 +33,10 @@ const register = async (req, res, next) => {
             email: email || null,
             phone: phone || null,
             password_hash: password || null,
-            address: address || null
+            full_name: full_name || null,
+            address: address || null,
+            city: city || null,
+            region: region || null
         });
 
         return sendSuccess(res, 201, 'User registered successfully', {
@@ -155,7 +158,7 @@ const verifyEmailOTP = async (req, res, next) => {
                 email: normalizedEmail,
                 phone: null,
                 password_hash: null,
-                address: name || null
+                full_name: name || null
             });
             console.log(`New user created via email OTP: ${user.user_id}`);
         }
@@ -204,6 +207,11 @@ const loginWithEmail = async (req, res, next) => {
             return sendError(res, 404, 'Invalid email or password');
         }
 
+        // Soft-disabled accounts (e.g. deactivated staff) cannot log in
+        if (user.is_active === false) {
+            return sendError(res, 403, 'Your account has been deactivated. Contact an administrator.');
+        }
+
         const isValidPassword = await user.validatePassword(password);
 
         if (!isValidPassword) {
@@ -219,6 +227,10 @@ const loginWithEmail = async (req, res, next) => {
             jwtConfig.secret,
             { expiresIn: jwtConfig.expiresIn }
         );
+
+        // Update last login timestamp (fire-and-forget)
+        user.last_login_at = new Date();
+        await user.save();
 
         return sendSuccess(res, 200, 'Login successful', {
             token,

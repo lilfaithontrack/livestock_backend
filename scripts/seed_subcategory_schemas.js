@@ -44,11 +44,6 @@ const BASE_FIELDS = [
     { key: 'social_facebook',     label: 'Facebook / ፌስቡክ',                  type: 'text',     placeholder: 'https://facebook.com/yourpage',     required: false, group: 'Social Media' },
     { key: 'social_instagram',    label: 'Instagram / ኢንስታግራም',              type: 'text',     placeholder: 'https://instagram.com/yourhandle',  required: false, group: 'Social Media' },
 
-    // ── SEO & Discoverability ─────────────────────────────────────────────────
-    { key: 'tags',                label: 'Search Tags / የፍለጋ መለያዎች',          type: 'text',     placeholder: 'e.g. organic, fresh, Borena — comma separated', required: false, group: 'SEO' },
-    { key: 'seo_title',           label: 'SEO Title / የፍለጋ ርዕስ',              type: 'text',     placeholder: 'Short title for search engines (max 60 chars)',  required: false, group: 'SEO' },
-    { key: 'seo_description',     label: 'SEO Description / አጭር ማብራሪያ',      type: 'textarea', placeholder: 'Brief description for search engines (max 160 chars)', required: false, group: 'SEO' },
-    { key: 'featured',            label: 'Featured Product / ተለይቶ የቀረበ',     type: 'checkbox', required: false, group: 'SEO' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

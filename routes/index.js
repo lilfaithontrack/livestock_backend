@@ -29,6 +29,8 @@ const notificationRoutes = require('./notificationRoutes');
 const sellerRoutes = require('./sellerRoutes');
 const locationRoutes = require('./locationRoutes');
 const reviewRoutes = require('./reviewRoutes');
+const staffRoutes = require('./staffRoutes');
+const languageRoutes = require('./languageRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -58,6 +60,8 @@ router.use('/notifications', notificationRoutes);
 router.use('/seller', sellerRoutes);
 router.use('/locations', locationRoutes);
 router.use('/reviews', reviewRoutes);
+router.use('/staff', staffRoutes);
+router.use('/languages', languageRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {

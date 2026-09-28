@@ -32,6 +32,10 @@ const SellerSettings = require('./SellerSettings');
 const SellerDeliveryAgent = require('./SellerDeliveryAgent');
 const OrderGroup = require('./OrderGroup');
 const ProductReview = require('./ProductReview');
+const SellerDocument = require('./SellerDocument');
+const StaffRole = require('./StaffRole');
+const Language = require('./Language');
+const Translation = require('./Translation');
 
 // Define Associations
 
@@ -182,6 +186,18 @@ Rental.belongsTo(RentalCategory, { foreignKey: 'category_id', as: 'category' });
 Rental.belongsTo(User, { foreignKey: 'admin_approved_by', as: 'approver' });
 User.hasMany(Rental, { foreignKey: 'owner_id', as: 'rentals' });
 
+// SellerDocument Associations (multi-file KYC)
+SellerDocument.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(SellerDocument, { foreignKey: 'user_id', as: 'seller_documents' });
+
+// StaffRole Associations
+StaffRole.hasMany(User, { foreignKey: 'staff_role_id', as: 'staff_users' });
+User.belongsTo(StaffRole, { foreignKey: 'staff_role_id', as: 'staff_role' });
+
+// Language / Translation Associations
+Language.hasMany(Translation, { foreignKey: 'language_code', as: 'translations' });
+Translation.belongsTo(Language, { foreignKey: 'language_code', as: 'language' });
+
 // Export all models and sequelize instance
 const db = {
     sequelize,
@@ -215,7 +231,11 @@ const db = {
     SellerSettings,
     SellerDeliveryAgent,
     OrderGroup,
-    ProductReview
+    ProductReview,
+    SellerDocument,
+    StaffRole,
+    Language,
+    Translation
 };
 
 module.exports = db;

@@ -58,6 +58,23 @@ async function run() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // ── users ─────────────────────────────────────────────────────────────────
+    console.log('\n👤  users:');
+    await addColumnIfMissing('users', 'seller_rating_avg',
+        "DECIMAL(3,2) NULL DEFAULT NULL COMMENT 'Average rating from product reviews'");
+    await addColumnIfMissing('users', 'seller_rating_count',
+        "INT NOT NULL DEFAULT 0 COMMENT 'Number of product reviews'");
+
+    // Fix seller_rating_avg if it was previously added as NOT NULL (no default)
+    try {
+        await sequelize.query(
+            "ALTER TABLE `users` MODIFY COLUMN `seller_rating_avg` DECIMAL(3,2) NULL DEFAULT NULL COMMENT 'Average rating from product reviews'"
+        );
+        console.log('  ✅  Fixed users.seller_rating_avg → DECIMAL(3,2) NULL DEFAULT NULL');
+    } catch (err) {
+        console.error(`  ❌  Failed to fix users.seller_rating_avg: ${err.message}`);
+    }
+
     console.log('\n✅  Done. Re-run check_missing_columns.js to verify.\n');
     await sequelize.close();
 }

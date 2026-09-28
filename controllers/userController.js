@@ -1,6 +1,106 @@
-const { User } = require('../models');
+const { User, SellerDocument } = require('../models');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { compressImage } = require('../middleware/uploadMiddleware');
+
+// Map multipart field names to seller_documents.document_type values.
+const FIELD_TO_DOC_TYPE = {
+    trade_license: 'trade_license',
+    tin_vat_document: 'tin_vat',
+    national_id_front: 'national_id_front',
+    national_id_back: 'national_id_back',
+};
+
+// Map document_type to the legacy single-URL column on `users`.
+const DOC_TYPE_TO_LEGACY_COLUMN = {
+    trade_license: 'trade_license_url',
+    tin_vat: 'tin_vat_url',
+    national_id_front: 'national_id_front_url',
+    national_id_back: 'national_id_back_url',
+};
+
+/**
+ * Process all files for a given multipart field name:
+ *  - compress each image
+ *  - insert a row into seller_documents for each file
+ *  - keep the legacy single-URL column in sync (first file wins)
+ * Returns { urls: string[], legacyUrl: string|null }
+ */
+const processDocumentField = async (userId, files, fieldName, compressOpts) => {
+    const docType = FIELD_TO_DOC_TYPE[fieldName];
+    if (!docType) return { urls: [], legacyUrl: null };
+
+    const fieldFiles = files && files[fieldName] ? files[fieldName] : [];
+    if (fieldFiles.length === 0) {
+        return { urls: [], legacyUrl: null };
+    }
+
+    const urls = [];
+    let legacyUrl = null;
+
+    for (let i = 0; i < fieldFiles.length; i++) {
+        const file = fieldFiles[i];
+        const compressedUrl = await compressImage(file.path, compressOpts);
+        urls.push(compressedUrl);
+        if (i === 0) legacyUrl = compressedUrl;
+
+        await SellerDocument.create({
+            user_id: userId,
+            document_type: docType,
+            file_url: compressedUrl,
+            file_name: file.originalname || file.filename || null,
+            mime_type: file.mimetype || null,
+            file_size: file.size || null,
+        });
+    }
+
+    return { urls, legacyUrl };
+};
+
+/**
+ * Gather all seller_documents for a user grouped by document_type.
+ * Falls back to the legacy single-URL columns when no rows exist.
+ */
+const getGroupedDocuments = async (user) => {
+    const rows = await SellerDocument.findAll({
+        where: { user_id: user.user_id },
+        order: [['uploaded_at', 'ASC']],
+    });
+
+    const grouped = {
+        trade_license: [],
+        tin_vat: [],
+        national_id_front: [],
+        national_id_back: [],
+    };
+
+    for (const r of rows) {
+        if (grouped[r.document_type]) {
+            grouped[r.document_type].push({
+                document_id: r.document_id,
+                file_url: r.file_url,
+                file_name: r.file_name,
+                mime_type: r.mime_type,
+                uploaded_at: r.uploaded_at,
+            });
+        }
+    }
+
+    // Legacy fallback: if a type has no rows but the user has a legacy URL,
+    // surface it as a single-entry array so the UI keeps working.
+    const legacy = {
+        trade_license: user.trade_license_url,
+        tin_vat: user.tin_vat_url,
+        national_id_front: user.national_id_front_url,
+        national_id_back: user.national_id_back_url,
+    };
+    for (const type of Object.keys(grouped)) {
+        if (grouped[type].length === 0 && legacy[type]) {
+            grouped[type].push({ file_url: legacy[type], legacy: true });
+        }
+    }
+
+    return grouped;
+};
 
 /**
  * Get user profile
@@ -28,17 +128,21 @@ const getProfile = async (req, res, next) => {
  */
 const updateProfile = async (req, res, next) => {
     try {
-        const { address, email, phone } = req.body;
+        const { address, email, phone, full_name, city, region } = req.body;
         const user = await User.findByPk(req.user.user_id);
 
         if (!user) {
             return sendError(res, 404, 'User not found');
         }
 
-        // Update fields
-        if (address) user.address = address;
-        if (email) user.email = email;
-        if (phone) user.phone = phone;
+        // Update fields. `address` is treated as a pure street address line —
+        // never re-encode the user's name into it (legacy bug source).
+        if (address !== undefined) user.address = address || null;
+        if (email !== undefined) user.email = email || null;
+        if (phone !== undefined) user.phone = phone || null;
+        if (full_name !== undefined) user.full_name = full_name || null;
+        if (city !== undefined) user.city = city || null;
+        if (region !== undefined) user.region = region || null;
 
         await user.save();
 
@@ -48,7 +152,10 @@ const updateProfile = async (req, res, next) => {
                 role: user.role,
                 email: user.email,
                 phone: user.phone,
-                address: user.address
+                full_name: user.full_name,
+                address: user.address,
+                city: user.city,
+                region: user.region
             }
         });
     } catch (error) {
@@ -78,59 +185,28 @@ const uploadKYCDocuments = async (req, res, next) => {
         const updates = {};
         const uploadedFiles = {};
 
-        // Handle trade license
-        if (req.files && req.files['trade_license'] && req.files['trade_license'][0]) {
-            const file = req.files['trade_license'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 1600,
-                quality: 85
-            });
-            updates.trade_license_url = compressedUrl;
-            uploadedFiles.trade_license = compressedUrl;
-        }
+        // Process each document type — supports multiple files per type.
+        // Each file is stored as a row in seller_documents; the legacy
+        // single-URL column is kept in sync (first file wins) for backward
+        // compatibility with older clients/admin tooling.
+        const tl = await processDocumentField(user_id, req.files, 'trade_license', { width: 1200, height: 1600, quality: 85 });
+        if (tl.legacyUrl) { updates.trade_license_url = tl.legacyUrl; uploadedFiles.trade_license = tl.urls; }
 
-        // Handle TIN/VAT document
-        if (req.files && req.files['tin_vat_document'] && req.files['tin_vat_document'][0]) {
-            const file = req.files['tin_vat_document'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 1600,
-                quality: 85
-            });
-            updates.tin_vat_url = compressedUrl;
-            uploadedFiles.tin_vat_document = compressedUrl;
-        }
+        const tv = await processDocumentField(user_id, req.files, 'tin_vat_document', { width: 1200, height: 1600, quality: 85 });
+        if (tv.legacyUrl) { updates.tin_vat_url = tv.legacyUrl; uploadedFiles.tin_vat_document = tv.urls; }
 
-        // Handle national ID front
-        if (req.files && req.files['national_id_front'] && req.files['national_id_front'][0]) {
-            const file = req.files['national_id_front'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 800,
-                quality: 85
-            });
-            updates.national_id_front_url = compressedUrl;
-            uploadedFiles.national_id_front = compressedUrl;
-        }
+        const nf = await processDocumentField(user_id, req.files, 'national_id_front', { width: 1200, height: 800, quality: 85 });
+        if (nf.legacyUrl) { updates.national_id_front_url = nf.legacyUrl; uploadedFiles.national_id_front = nf.urls; }
 
-        // Handle national ID back
-        if (req.files && req.files['national_id_back'] && req.files['national_id_back'][0]) {
-            const file = req.files['national_id_back'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 800,
-                quality: 85
-            });
-            updates.national_id_back_url = compressedUrl;
-            uploadedFiles.national_id_back = compressedUrl;
-        }
+        const nb = await processDocumentField(user_id, req.files, 'national_id_back', { width: 1200, height: 800, quality: 85 });
+        if (nb.legacyUrl) { updates.national_id_back_url = nb.legacyUrl; uploadedFiles.national_id_back = nb.urls; }
 
-        // Check if all required documents are provided
-        const hasTradeLicense = updates.trade_license_url || user.trade_license_url;
-        const hasTinVat = updates.tin_vat_url || user.tin_vat_url;
-        const hasIdFront = updates.national_id_front_url || user.national_id_front_url;
-        const hasIdBack = updates.national_id_back_url || user.national_id_back_url;
+        // Check if all required documents are provided (new uploads OR existing)
+        const docs = await getGroupedDocuments(user);
+        const hasTradeLicense = docs.trade_license.length > 0;
+        const hasTinVat = docs.tin_vat.length > 0;
+        const hasIdFront = docs.national_id_front.length > 0;
+        const hasIdBack = docs.national_id_back.length > 0;
 
         if (!hasTradeLicense || !hasTinVat || !hasIdFront || !hasIdBack) {
             return sendError(res, 400, 'All KYC documents are required: trade license, TIN/VAT document, national ID front, and national ID back');
@@ -152,14 +228,10 @@ const uploadKYCDocuments = async (req, res, next) => {
         Object.assign(user, updates);
         await user.save();
 
+        const finalDocs = await getGroupedDocuments(user);
         return sendSuccess(res, 200, 'KYC documents uploaded successfully', {
             user_id: user.user_id,
-            documents: {
-                trade_license: user.trade_license_url,
-                tin_vat_document: user.tin_vat_url,
-                national_id_front: user.national_id_front_url,
-                national_id_back: user.national_id_back_url
-            },
+            documents: finalDocs,
             kyc_status: user.kyc_status,
             kyc_submitted_at: user.kyc_submitted_at,
             message: 'Documents uploaded. Awaiting admin verification.'
@@ -195,20 +267,25 @@ const getKYCDocumentsStatus = async (req, res, next) => {
             return sendError(res, 404, 'User not found');
         }
 
+        const docs = await getGroupedDocuments(user);
+
         return sendSuccess(res, 200, 'KYC documents status retrieved successfully', {
             user_id: user.user_id,
             kyc_status: user.kyc_status,
             documents: {
-                trade_license: user.trade_license_url ? true : false,
-                tin_vat_document: user.tin_vat_url ? true : false,
-                national_id_front: user.national_id_front_url ? true : false,
-                national_id_back: user.national_id_back_url ? true : false
+                trade_license: docs.trade_license.length > 0,
+                tin_vat_document: docs.tin_vat.length > 0,
+                national_id_front: docs.national_id_front.length > 0,
+                national_id_back: docs.national_id_back.length > 0
             },
+            // Multi-file arrays per document type
+            document_files: docs,
+            // Legacy single-URL map (first file per type) for backward compat
             document_urls: {
-                trade_license_url: user.trade_license_url,
-                tin_vat_url: user.tin_vat_url,
-                national_id_front_url: user.national_id_front_url,
-                national_id_back_url: user.national_id_back_url
+                trade_license_url: docs.trade_license[0]?.file_url || null,
+                tin_vat_url: docs.tin_vat[0]?.file_url || null,
+                national_id_front_url: docs.national_id_front[0]?.file_url || null,
+                national_id_back_url: docs.national_id_back[0]?.file_url || null
             },
             kyc_submitted_at: user.kyc_submitted_at,
             kyc_reviewed_at: user.kyc_reviewed_at,
@@ -238,9 +315,12 @@ const updateKYCStatus = async (req, res, next) => {
             return sendError(res, 404, 'User not found');
         }
 
-        // Check if all required documents are present
+        // Check if all required documents are present (multi-file table OR legacy URLs)
         if (kyc_status === true) {
-            if (!user.trade_license_url || !user.tin_vat_url || !user.national_id_front_url || !user.national_id_back_url) {
+            const docs = await getGroupedDocuments(user);
+            const hasAll = docs.trade_license.length > 0 && docs.tin_vat.length > 0
+                && docs.national_id_front.length > 0 && docs.national_id_back.length > 0;
+            if (!hasAll) {
                 return sendError(res, 400, 'Cannot approve KYC: All documents (trade license, TIN/VAT document, national ID front and back) must be uploaded');
             }
         }
@@ -289,59 +369,25 @@ const becomeSeller = async (req, res, next) => {
         const updates = {};
         const uploadedFiles = {};
 
-        // Handle trade license
-        if (req.files && req.files['trade_license'] && req.files['trade_license'][0]) {
-            const file = req.files['trade_license'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 1600,
-                quality: 85
-            });
-            updates.trade_license_url = compressedUrl;
-            uploadedFiles.trade_license = compressedUrl;
-        }
+        // Process each document type — supports multiple files per type.
+        const tl = await processDocumentField(user_id, req.files, 'trade_license', { width: 1200, height: 1600, quality: 85 });
+        if (tl.legacyUrl) { updates.trade_license_url = tl.legacyUrl; uploadedFiles.trade_license = tl.urls; }
 
-        // Handle TIN/VAT document
-        if (req.files && req.files['tin_vat_document'] && req.files['tin_vat_document'][0]) {
-            const file = req.files['tin_vat_document'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 1600,
-                quality: 85
-            });
-            updates.tin_vat_url = compressedUrl;
-            uploadedFiles.tin_vat_document = compressedUrl;
-        }
+        const tv = await processDocumentField(user_id, req.files, 'tin_vat_document', { width: 1200, height: 1600, quality: 85 });
+        if (tv.legacyUrl) { updates.tin_vat_url = tv.legacyUrl; uploadedFiles.tin_vat_document = tv.urls; }
 
-        // Handle national ID front
-        if (req.files && req.files['national_id_front'] && req.files['national_id_front'][0]) {
-            const file = req.files['national_id_front'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 800,
-                quality: 85
-            });
-            updates.national_id_front_url = compressedUrl;
-            uploadedFiles.national_id_front = compressedUrl;
-        }
+        const nf = await processDocumentField(user_id, req.files, 'national_id_front', { width: 1200, height: 800, quality: 85 });
+        if (nf.legacyUrl) { updates.national_id_front_url = nf.legacyUrl; uploadedFiles.national_id_front = nf.urls; }
 
-        // Handle national ID back
-        if (req.files && req.files['national_id_back'] && req.files['national_id_back'][0]) {
-            const file = req.files['national_id_back'][0];
-            const compressedUrl = await compressImage(file.path, {
-                width: 1200,
-                height: 800,
-                quality: 85
-            });
-            updates.national_id_back_url = compressedUrl;
-            uploadedFiles.national_id_back = compressedUrl;
-        }
+        const nb = await processDocumentField(user_id, req.files, 'national_id_back', { width: 1200, height: 800, quality: 85 });
+        if (nb.legacyUrl) { updates.national_id_back_url = nb.legacyUrl; uploadedFiles.national_id_back = nb.urls; }
 
-        // Check if all required documents are provided
-        const hasTradeLicense = updates.trade_license_url || user.trade_license_url;
-        const hasTinVat = updates.tin_vat_url || user.tin_vat_url;
-        const hasIdFront = updates.national_id_front_url || user.national_id_front_url;
-        const hasIdBack = updates.national_id_back_url || user.national_id_back_url;
+        // Check if all required documents are provided (new uploads OR existing)
+        const docs = await getGroupedDocuments(user);
+        const hasTradeLicense = docs.trade_license.length > 0;
+        const hasTinVat = docs.tin_vat.length > 0;
+        const hasIdFront = docs.national_id_front.length > 0;
+        const hasIdBack = docs.national_id_back.length > 0;
 
         if (!hasTradeLicense || !hasTinVat || !hasIdFront || !hasIdBack) {
             return sendError(res, 400, 'All documents are required: trade license, TIN/VAT document, national ID/Kebele ID front, and national ID/Kebele ID back');
@@ -360,15 +406,11 @@ const becomeSeller = async (req, res, next) => {
         Object.assign(user, updates);
         await user.save();
 
+        const finalDocs = await getGroupedDocuments(user);
         return sendSuccess(res, 200, 'Seller application submitted successfully', {
             user_id: user.user_id,
             role: user.role,
-            documents: {
-                trade_license: user.trade_license_url,
-                tin_vat_document: user.tin_vat_url,
-                national_id_front: user.national_id_front_url,
-                national_id_back: user.national_id_back_url
-            },
+            documents: finalDocs,
             kyc_status: user.kyc_status,
             kyc_submitted_at: user.kyc_submitted_at,
             message: 'Your seller application has been submitted. Please wait for admin verification.'

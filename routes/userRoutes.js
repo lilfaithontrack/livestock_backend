@@ -11,16 +11,16 @@ router.get('/profile', verifyToken, userController.getProfile);
 // Update user profile (authenticated users)
 router.put('/profile', verifyToken, userController.updateProfile);
 
-// Upload KYC documents (Seller only)
+// Upload KYC documents (Seller only) — each type accepts up to 10 files
 router.post(
     '/kyc/documents',
     verifyToken,
     requireRole(['Seller']),
     upload.fields([
-        { name: 'trade_license', maxCount: 1 },
-        { name: 'tin_vat_document', maxCount: 1 },
-        { name: 'national_id_front', maxCount: 1 },
-        { name: 'national_id_back', maxCount: 1 }
+        { name: 'trade_license', maxCount: 10 },
+        { name: 'tin_vat_document', maxCount: 10 },
+        { name: 'national_id_front', maxCount: 10 },
+        { name: 'national_id_back', maxCount: 10 }
     ]),
     userController.uploadKYCDocuments
 );
@@ -34,10 +34,10 @@ router.post(
     verifyToken,
     requireRole(['Buyer', 'Seller']),
     upload.fields([
-        { name: 'trade_license', maxCount: 1 },
-        { name: 'tin_vat_document', maxCount: 1 },
-        { name: 'national_id_front', maxCount: 1 },
-        { name: 'national_id_back', maxCount: 1 }
+        { name: 'trade_license', maxCount: 10 },
+        { name: 'tin_vat_document', maxCount: 10 },
+        { name: 'national_id_front', maxCount: 10 },
+        { name: 'national_id_back', maxCount: 10 }
     ]),
     userController.becomeSeller
 );
